@@ -66,6 +66,7 @@ let pendents = [];
 let staff = { pin: '' };
 let sincronitzant = false;
 let equipTriat = '';
+let carregantRoster = false;
 
 /* ─────────────────────────────────────────────────────────────────────
    3. UTILITATS
@@ -258,18 +259,28 @@ async function sincronitza(manual) {
    ───────────────────────────────────────────────────────────────────── */
 
 async function carregaRoster(silenci) {
+  carregantRoster = true;
+  if (!jo) pintaQui();
   try {
     const res = await api('getJugadores', { equip: equipTriat }, 3);
     if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
     roster = Object.assign(roster, res.data, { ts: new Date().toISOString() });
     guarda(CLAUS.roster, roster);
+    carregantRoster = false;
     return true;
   } catch (err) {
     if (!silenci && CONFIG.API_URL) {
-      $('#qui-error').textContent = navigator.onLine
-        ? 'El full no ha contestat. Torna-ho a provar en uns segons.'
-        : 'Sense connexió: cal cobertura el primer cop.';
+      // Sense botó, l'única sortida seria tancar i tornar a obrir l'app.
+      $('#qui-error').innerHTML = (navigator.onLine
+        ? 'El full no ha contestat. '
+        : 'Sense connexió: cal cobertura el primer cop. ') +
+        '<button type="button" class="chip" id="qui-reintenta" style="min-height:34px">Tornar-ho a provar</button>';
+      $('#qui-reintenta').addEventListener('click', () => {
+        $('#qui-error').textContent = '';
+        carregaRoster(false).then(() => { if (!jo) pintaQui(); });
+      });
     }
+    carregantRoster = false;
     return false;
   }
 }
@@ -296,7 +307,9 @@ function pintaQui() {
           '<span class="dorsal">' + esc(j.dorsal || '—') + '</span>' +
           '<span class="nom">' + esc(j.nom) + '</span>' +
         '</button>').join('')
-    : '<p class="buit">Encara no hi ha cap jugadora activa al full.</p>';
+    : (carregantRoster
+        ? '<p class="buit">Carregant la llista…</p>'
+        : '<p class="buit">Encara no hi ha cap jugadora activa al full.</p>');
 
   $$('#llista-qui [data-id]').forEach((b) => {
     b.addEventListener('click', () => {

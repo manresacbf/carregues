@@ -1,6 +1,6 @@
 /* Puja el número de VERSIO cada cop que publiquis canvis: això fa que els
    mòbils esborrin la còpia antiga i es quedin només amb la nova. */
-const VERSIO = 'v2';
+const VERSIO = 'v3';
 const CACHE = 'carregues-mcbf-' + VERSIO;
 
 // L'app sencera es precarrega: al vestidor sovint no hi ha cobertura i el
