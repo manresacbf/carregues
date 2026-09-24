@@ -467,6 +467,8 @@ function getPanell_(equip, dilluns) {
       return {
         data: d,
         carrega: p ? (Number(p.carrega) || 0) : null,
+        duresa: p ? p.duresa : null,
+        minuts: p ? p.minuts : null,
         fatiga: a ? a.fatiga : null,
         son: a ? a.son : null,
         molestia: !!(a && a.te_molestia),
@@ -477,7 +479,7 @@ function getPanell_(equip, dilluns) {
     });
 
     return {
-      id: j.id, nom: j.nom, dorsal: j.dorsal,
+      id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip,
       dies: cel,
       carrega_setmana: c.carrega_setmana,
       mitjana_previa: c.mitjana_previa,

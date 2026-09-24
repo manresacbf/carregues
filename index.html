@@ -204,6 +204,27 @@
   .barra-compliment{height:9px; background:var(--bg-alt); border-radius:999px; overflow:hidden; margin:8px 0 6px;}
   .barra-compliment i{display:block; height:100%; background:var(--ok);}
 
+  .filtres-equip{display:flex; gap:6px; overflow-x:auto; padding:2px 0 10px; scrollbar-width:none;}
+  .filtres-equip::-webkit-scrollbar{display:none;}
+  table.graella th.dia-entreno{color:var(--text);}
+  /* La cel·la plena no ensenya la xifra: la forma de la setmana es llegeix
+     pel color, i el número surt a sota quan la toques. */
+  table.graella td.cel.plena{color:transparent;}
+  table.graella td.cel.triada{outline:2px solid var(--pink); outline-offset:1px;}
+  table.graella td.variacio{
+    width:54px; height:40px; text-align:center; border-radius:8px;
+    font-weight:700; font-size:12.5px;
+    background:var(--bg-raised); border:1px solid var(--line); color:var(--text-dim);
+  }
+  table.graella td.variacio.alt{background:rgba(245,165,36,.18); border-color:var(--avis); color:var(--avis);}
+  table.graella td.variacio.normal{color:var(--text);}
+  .detall-cel{
+    margin:10px 0 0; padding:10px 12px; font-size:14px; min-height:42px;
+    background:var(--bg); border:1px solid var(--line); border-radius:10px;
+    color:var(--text-dim);
+  }
+  .detall-cel b{color:var(--text);}
+
   #toast{
     position:fixed; z-index:50; left:14px; right:14px;
     bottom:calc(18px + env(safe-area-inset-bottom));

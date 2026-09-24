@@ -761,10 +761,52 @@ async function demanaPanell(dilluns) {
   return panell;
 }
 
+let equipPanell = '';
+
+function jugadoresVisibles() {
+  return (panell.jugadores || []).filter((j) => !equipPanell || j.equip === equipPanell);
+}
+
+function equipsDelPanell() {
+  const vist = {};
+  (panell.jugadores || []).forEach((j) => { if (j.equip) vist[j.equip] = true; });
+  return Object.keys(vist).sort();
+}
+
+/**
+ * L'únic número que es pot llegir sol. "2100" no vol dir res; "+45% respecte
+ * la seva mitjana" sí. Surt del ratio que ja calcula el full.
+ */
+function variacio(ratio) {
+  return (ratio === null || ratio === undefined) ? null : Math.round((ratio - 1) * 100);
+}
+
+/** Compliment recalculat només amb les jugadores que es veuen ara. */
+function complimentDe(visibles, diesEsperats) {
+  let rebuts = 0;
+  const sense = [];
+  visibles.forEach((j) => {
+    let meus = 0;
+    j.dies.forEach((d) => {
+      if (diesEsperats.indexOf(d.data) === -1) return;
+      if (d.te_abans) meus++;
+      if (d.te_despres) meus++;
+    });
+    rebuts += meus;
+    if (!meus && diesEsperats.length) sense.push(j.nom);
+  });
+  const esperats = visibles.length * diesEsperats.length * 2;
+  return { rebuts: rebuts, esperats: esperats, sense: sense,
+           percentatge: esperats ? Math.round((rebuts / esperats) * 100) : null };
+}
+
+/* La intensitat és relativa al dia més fort de la setmana que s'està mirant:
+   el que es vol veure d'un cop d'ull és la forma de la setmana. El valor
+   absolut surt tocant la cel·la. */
 function colorCarrega(v, max) {
   if (v === null || v === undefined) return '';
   const p = max > 0 ? v / max : 0;
-  return 'background:rgba(255,45,120,' + (0.12 + p * 0.68).toFixed(2) + ');';
+  return 'background:rgba(255,45,120,' + (0.14 + p * 0.66).toFixed(2) + ');';
 }
 
 function pintaPanell() {
@@ -776,71 +818,129 @@ function pintaPanell() {
     demanaPanell(setmanaPanell || dillunsDe(avuiISO()))
       .then(() => pintaPanell())
       .catch((e) => {
-        $('#contingut').innerHTML = '<p class="buit">No s\'ha pogut carregar: ' + esc(String(e && e.message ? e.message : e)) + '</p>';
+        $('#contingut').innerHTML = '<p class="buit">No s&#39;ha pogut carregar: ' +
+          esc(String(e && e.message ? e.message : e)) + '</p>';
       });
     return;
   }
 
-  const max = Math.max.apply(null, panell.jugadores.map((j) =>
+  const equips = equipsDelPanell();
+  const visibles = jugadoresVisibles();
+  const diesEsperats = panell.dies_esperats || [];
+  const c = complimentDe(visibles, diesEsperats);
+
+  // Les alertes segueixen el filtre: si mires el U15, les del U13 no hi pinten res.
+  const idsVisibles = {};
+  visibles.forEach((j) => { idsVisibles[j.id] = true; });
+  const alertes = panell.alertes.filter((a) => idsVisibles[a.id_jugadora]);
+
+  const max = Math.max.apply(null, visibles.map((j) =>
     Math.max.apply(null, j.dies.map((d) => d.carrega || 0).concat([0]))).concat([1]));
 
-  const alertes = panell.alertes.length
-    ? panell.alertes.map((a) =>
+  const filtres = equips.length > 1
+    ? '<div class="filtres-equip">' +
+        '<button type="button" class="chip" data-equip="" aria-pressed="' + (!equipPanell) + '">Tots</button>' +
+        equips.map((e) => '<button type="button" class="chip" data-equip="' + esc(e) + '"' +
+          ' aria-pressed="' + (equipPanell === e) + '">' + esc(e) + '</button>').join('') +
+      '</div>'
+    : '';
+
+  const blocAlertes = alertes.length
+    ? alertes.map((a) =>
         '<div class="alerta ' + (a.nivell === 'vermella' ? 'vermella' : '') + '">' +
           '<div class="qui">' + esc(a.jugadora) + ' · ' + esc(a.titol) + '</div>' +
           '<div class="que">' + esc(a.detall) + '</div>' +
         '</div>').join('')
-    : '<p class="meta">Cap alerta aquesta setmana.</p>';
+    : '<p class="meta" style="margin:0">Cap alerta' + (equipPanell ? ' al ' + esc(equipPanell) : '') + ' aquesta setmana.</p>';
 
-  const c = panell.compliment;
   const capsDies = panell.dies.map((d) =>
-    '<th>' + esc(diaCurt(d)) + '<br>' + esc(d.slice(8, 10)) + '</th>').join('');
+    '<th' + (diesEsperats.indexOf(d) !== -1 ? ' class="dia-entreno"' : '') + '>' +
+    esc(diaCurt(d)) + '<br>' + esc(d.slice(8, 10)) + '</th>').join('');
 
-  const files = panell.jugadores.map((j) =>
-    '<tr><td class="nom"><button type="button" class="chip" data-fitxa="' + esc(j.id) + '" style="min-height:34px">' +
-      esc(j.nom) + '</button></td>' +
-    j.dies.map((d) =>
-      '<td class="cel' + (d.carrega === null ? ' buida' : '') + (d.limita ? ' limita' : '') + '" ' +
-      'style="' + colorCarrega(d.carrega, max) + '">' +
-        (d.carrega !== null ? Math.round(d.carrega) : (d.te_abans ? '·' : '–')) +
-        (d.molestia ? '<span class="punt-mol"></span>' : '') +
-      '</td>').join('') +
-    '<td class="cel" style="background:var(--bg-raised)">' +
-      (j.ratio === null ? '—' : String(j.ratio).replace('.', ',')) + '</td></tr>').join('');
+  const files = visibles.map((j) => {
+    const v = variacio(j.ratio);
+    const alt = j.ratio !== null && j.ratio > panell.llindar;
+    const txt = v === null ? '—' : (v > 0 ? '+' + v : (v < 0 ? '−' + Math.abs(v) : '0')) + '%';
+    const titol = v === null ? (j.motiu_ratio || 'sense referència')
+      : 'setmana ' + j.carrega_setmana + ' · mitjana de les 3 anteriors ' + j.mitjana_previa;
+
+    return '<tr><td class="nom"><button type="button" class="chip" data-fitxa="' + esc(j.id) + '" style="min-height:34px">' +
+        (j.dorsal ? '<b>' + esc(j.dorsal) + '</b> ' : '') + esc(j.nom) + '</button></td>' +
+      j.dies.map((d) => {
+        const te = d.carrega !== null && d.carrega !== undefined;
+        return '<td class="cel' + (te ? ' plena' : ' buida') + (d.limita ? ' limita' : '') + '"' +
+          ' style="' + (te ? colorCarrega(d.carrega, max) : '') + '"' +
+          ' data-jug="' + esc(j.id) + '" data-dia="' + esc(d.data) + '">' +
+          (te ? '' : (d.te_abans ? '·' : '–')) +
+          (d.molestia ? '<span class="punt-mol"></span>' : '') +
+        '</td>';
+      }).join('') +
+      '<td class="variacio ' + (v === null ? 'neutre' : (alt ? 'alt' : (v <= -25 ? 'baix' : 'normal'))) + '"' +
+        ' title="' + esc(titol) + '">' + txt + '</td></tr>';
+  }).join('');
 
   $('#contingut').innerHTML =
-    '<div style="display:flex; align-items:center; gap:8px; margin-bottom:12px">' +
+    '<div style="display:flex; align-items:center; gap:8px; margin-bottom:10px">' +
       '<button type="button" class="chip" id="setm-ant">←</button>' +
       '<span class="meta" style="flex:1; text-align:center">Setmana del ' + esc(formatDia(panell.setmana)) + '</span>' +
       '<button type="button" class="chip" id="setm-seg">→</button>' +
     '</div>' +
+    filtres +
+
+    '<div class="card"><div class="eyebrow">Alertes actives</div>' + blocAlertes + '</div>' +
 
     '<div class="card">' +
-      '<div class="eyebrow">Alertes actives</div>' + alertes +
-    '</div>' +
-
-    '<div class="card">' +
-      '<div class="eyebrow">Compliment</div>' +
+      '<div class="eyebrow">Compliment' + (equipPanell ? ' · ' + esc(equipPanell) : '') + '</div>' +
       '<div style="font-size:25px; font-weight:800">' + (c.percentatge === null ? '—' : c.percentatge + '%') + '</div>' +
       '<div class="barra-compliment"><i style="width:' + (c.percentatge || 0) + '%"></i></div>' +
-      '<p class="meta" style="margin:0">' + c.rebuts + ' de ' + c.esperats + ' respostes esperades.</p>' +
-      (c.sense_resposta.length
-        ? '<p class="meta" style="margin:8px 0 0"><b>No han contestat gens aquesta setmana:</b><br>' +
-          esc(c.sense_resposta.join(', ')) + '</p>'
+      '<p class="meta" style="margin:0">' + c.rebuts + ' de ' + c.esperats + ' respostes esperades · ' +
+        visibles.length + (visibles.length === 1 ? ' jugadora' : ' jugadores') + '</p>' +
+      (c.sense.length
+        ? '<p class="meta" style="margin:8px 0 0"><b>No han contestat gens:</b><br>' + esc(c.sense.join(', ')) + '</p>'
         : '<p class="meta" style="margin:8px 0 0">Han contestat totes.</p>') +
     '</div>' +
 
     '<div class="card">' +
-      '<div class="eyebrow">Càrrega de la setmana</div>' +
-      '<div class="graella-embolcall"><table class="graella"><thead><tr><th></th>' + capsDies + '<th>ràtio</th></tr></thead>' +
+      '<div class="eyebrow">La setmana d&#39;un cop d&#39;ull</div>' +
+      '<div class="graella-embolcall"><table class="graella"><thead><tr><th></th>' + capsDies +
+        '<th title="Respecte la mitjana de les 3 setmanes anteriors">vs<br>normal</th></tr></thead>' +
       '<tbody>' + (files || '<tr><td class="nom">Cap jugadora</td></tr>') + '</tbody></table></div>' +
+      '<p class="detall-cel" id="detall-cel">Toca una cel·la per veure què hi ha darrere.</p>' +
       '<p class="meta" style="margin-top:10px">' +
-        'Cada cel·la és la càrrega del dia. El punt taronja marca molèstia i la vora vermella, que la limita. ' +
-        '«·» vol dir que ha contestat abans però no després.' +
+        'Com més fosca la cel·la, més càrrega va fer aquell dia comparat amb el dia més fort de la setmana. ' +
+        'Punt taronja: molèstia. Vora vermella: la limita. «·»: va contestar abans però no després. ' +
+        '«–»: no va contestar.' +
       '</p>' +
     '</div>' +
 
     '<button class="btn secundari" id="surt-staff">Sortir del panell</button>';
+
+  $$('#contingut [data-equip]').forEach((b) => b.addEventListener('click', () => {
+    equipPanell = b.getAttribute('data-equip');
+    pintaPanell();
+  }));
+
+  // El número surt tocant la cel·la: a la graella només hi ha la forma.
+  $$('#contingut td.cel[data-jug]').forEach((td) => td.addEventListener('click', () => {
+    const j = visibles.filter((x) => x.id === td.getAttribute('data-jug'))[0];
+    const d = j ? j.dies.filter((x) => x.data === td.getAttribute('data-dia'))[0] : null;
+    if (!d) return;
+    const trossos = [esc(j.nom) + ' · ' + esc(diaCurt(d.data)) + ' ' + esc(formatDia(d.data))];
+    if (d.carrega !== null && d.carrega !== undefined) {
+      trossos.push('càrrega <b>' + Math.round(d.carrega) + '</b>' +
+        (d.duresa ? ' (duresa ' + d.duresa + ' × ' + d.minuts + ' min)' : ''));
+    } else if (d.te_abans) {
+      trossos.push('va contestar abans, però no després');
+    } else {
+      trossos.push('sense resposta');
+    }
+    if (d.fatiga) trossos.push('cansament ' + d.fatiga + '/5');
+    if (d.son) trossos.push('son ' + d.son + '/5');
+    if (d.molestia) trossos.push(d.limita ? '<b style="color:var(--vermell)">molèstia que la limita</b>' : 'amb molèstia');
+    $('#detall-cel').innerHTML = trossos.join(' — ');
+    $$('#contingut td.cel.triada').forEach((x) => x.classList.remove('triada'));
+    td.classList.add('triada');
+  }));
 
   const vesSetmana = (n) => {
     panell = null;
