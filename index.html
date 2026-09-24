@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="ca">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Càrregues MCBF</title>
+<meta name="theme-color" content="#11141a">
+<link rel="manifest" href="manifest.json">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Càrregues">
+<style>
+  :root{
+    --bg:#11141a;
+    --bg-raised:#181c24;
+    --bg-alt:#1e2330;
+    --line:#2a2f3a;
+    --pink:#ff2d78;
+    --pink-dim:#c21f5c;
+    --text:#f2f1ee;
+    --text-dim:#8b93a3;
+    --ok:#33c06f;
+    --avis:#f5a524;
+    --vermell:#ff3b5c;
+    --toc:44px;
+    --font:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0; padding:0; background:var(--bg); color:var(--text);}
+  body{font-family:var(--font); font-size:16px; line-height:1.4; min-height:100vh; min-height:100dvh;}
+  button,input,select,textarea{font-family:inherit; font-size:16px; color:inherit;}
+  .amagat{display:none !important;}
+
+  /* ---------- Capçalera ---------- */
+  .barra{
+    position:sticky; top:0; z-index:20;
+    background:rgba(17,20,26,.94); backdrop-filter:blur(8px);
+    border-bottom:1px solid var(--line);
+    padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+    display:flex; align-items:center; gap:10px;
+  }
+  .barra h1{
+    font-size:17px; font-weight:700; letter-spacing:.04em; text-transform:uppercase;
+    margin:0; flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;
+  }
+  .btn-icona{
+    flex:0 0 auto; min-width:var(--toc); min-height:var(--toc);
+    display:flex; align-items:center; justify-content:center;
+    background:transparent; border:1px solid var(--line); border-radius:12px; color:var(--text);
+  }
+  .sync{
+    flex:0 0 auto; min-height:36px; padding:0 12px;
+    display:flex; align-items:center; gap:7px;
+    background:var(--bg-raised); border:1px solid var(--line); border-radius:999px;
+    font-size:13px; color:var(--text-dim);
+  }
+  .sync .punt{width:8px; height:8px; border-radius:50%; background:var(--ok); flex:0 0 auto;}
+  .sync.pendent{color:var(--avis); border-color:rgba(245,165,36,.4);}
+  .sync.pendent .punt{background:var(--avis);}
+  .sync.treballant .punt{animation:batec 1s infinite;}
+  @keyframes batec{50%{opacity:.25;}}
+
+  main{padding:16px 14px calc(30px + env(safe-area-inset-bottom)); max-width:560px; margin:0 auto;}
+
+  /* ---------- Comuns ---------- */
+  .card{background:var(--bg-raised); border:1px solid var(--line); border-radius:14px; padding:14px; margin-bottom:12px;}
+  .eyebrow{font-size:12px; letter-spacing:.22em; text-transform:uppercase; color:var(--pink); font-weight:700; margin-bottom:8px;}
+  .meta{font-size:14px; color:var(--text-dim);}
+  .buit{text-align:center; color:var(--text-dim); padding:26px 10px;}
+  .nota{
+    font-size:14px; color:var(--text-dim);
+    background:rgba(255,45,120,.07); border-left:3px solid var(--pink-dim);
+    border-radius:8px; padding:10px 12px; margin-bottom:14px;
+  }
+  .btn{
+    width:100%; min-height:54px; background:var(--pink); border:none; border-radius:12px;
+    color:#fff; font-weight:700; font-size:17px; letter-spacing:.02em;
+  }
+  .btn:active{background:var(--pink-dim);}
+  .btn.secundari{background:var(--bg-alt); border:1px solid var(--line); color:var(--text);}
+  .btn[disabled]{opacity:.5;}
+  .camp{margin-bottom:12px;}
+  .camp label{display:block; font-size:13px; color:var(--text-dim); margin-bottom:5px;}
+  .camp input,.camp textarea,.camp select{
+    width:100%; min-height:var(--toc); background:var(--bg); border:1px solid var(--line);
+    border-radius:10px; padding:10px 12px;
+  }
+  .camp textarea{min-height:72px; resize:vertical;}
+
+  /* ---------- Selector de jugadora ---------- */
+  #vista-qui{max-width:460px; margin:0 auto; padding:max(24px, env(safe-area-inset-top)) 18px calc(24px + env(safe-area-inset-bottom));}
+  #vista-qui .logo{width:76px; height:76px; border-radius:18px; display:block; margin:0 auto 14px;}
+  #vista-qui h2{font-size:24px; font-weight:800; text-align:center; margin:0 0 4px; text-transform:uppercase; letter-spacing:.03em;}
+  .fila-jug{
+    display:flex; align-items:center; gap:13px; width:100%; text-align:left;
+    background:var(--bg-raised); border:1px solid var(--line);
+    border-radius:14px; padding:13px 14px; margin-bottom:9px; min-height:60px;
+  }
+  .fila-jug:active{background:var(--bg-alt);}
+  .dorsal{
+    flex:0 0 auto; width:38px; height:38px; border-radius:10px;
+    background:var(--bg-alt); border:1px solid var(--line);
+    display:flex; align-items:center; justify-content:center;
+    font-weight:800; font-size:15px; color:var(--pink);
+  }
+  .fila-jug .nom{font-size:18px; font-weight:700;}
+
+  /* ---------- Inici ---------- */
+  .hola{font-size:26px; font-weight:800; margin:2px 0 2px;}
+  .accio{
+    display:flex; align-items:center; gap:14px; width:100%; text-align:left;
+    background:var(--bg-raised); border:1px solid var(--line); border-radius:16px;
+    padding:18px 16px; margin-bottom:11px; min-height:86px; color:var(--text);
+  }
+  .accio:active{background:var(--bg-alt);}
+  .accio .ic{font-size:30px; flex:0 0 auto;}
+  .accio .tit{font-size:18px; font-weight:700;}
+  .accio .sub{font-size:13.5px; color:var(--text-dim);}
+  .accio.fet{border-color:rgba(51,192,111,.45);}
+  .accio .fetmarca{margin-left:auto; color:var(--ok); font-size:13px; font-weight:700; flex:0 0 auto;}
+
+  /* ---------- Escales amb emoji ---------- */
+  .pregunta{margin-bottom:18px;}
+  .pregunta > .q{font-size:17px; font-weight:700; margin-bottom:9px;}
+  .escala{display:grid; grid-template-columns:repeat(5,1fr); gap:6px;}
+  .mood{
+    min-height:78px; padding:8px 2px;
+    background:var(--bg); border:1px solid var(--line); border-radius:12px;
+    display:flex; flex-direction:column; align-items:center; justify-content:center; gap:4px;
+  }
+  .mood .emoji{font-size:26px; line-height:1;}
+  .mood .lbl{font-size:10.5px; color:var(--text-dim); text-align:center; line-height:1.2;}
+  .mood[aria-pressed="true"]{background:var(--pink); border-color:var(--pink);}
+  .mood[aria-pressed="true"] .lbl{color:#fff; font-weight:600;}
+
+  /* ---------- Escala 0-10 ---------- */
+  .escala11{display:grid; grid-template-columns:repeat(6,1fr); gap:6px;}
+  .num{
+    min-height:var(--toc); background:var(--bg); border:1px solid var(--line);
+    border-radius:10px; font-size:17px; font-weight:700; color:var(--text-dim);
+  }
+  .num[aria-pressed="true"]{background:var(--pink); border-color:var(--pink); color:#fff;}
+  .extrems{display:flex; justify-content:space-between; font-size:12px; color:var(--text-dim); margin-top:6px;}
+
+  /* ---------- Sí / No ---------- */
+  .sino{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .sino button{
+    min-height:52px; background:var(--bg); border:1px solid var(--line);
+    border-radius:12px; font-size:16px; font-weight:700; color:var(--text-dim);
+  }
+  .sino button[aria-pressed="true"]{background:var(--pink); border-color:var(--pink); color:#fff;}
+
+  /* ---------- Mapa corporal ---------- */
+  .cos-cap{display:flex; justify-content:space-between; font-size:11px; letter-spacing:.12em;
+           text-transform:uppercase; color:var(--text-dim); padding:0 6px 4px;}
+  svg.cos{display:block; width:100%; max-width:260px; margin:0 auto;}
+  svg.cos .decor{fill:var(--bg-alt); stroke:var(--line); stroke-width:1.5;}
+  svg.cos .zona{fill:var(--bg-alt); stroke:var(--line); stroke-width:1.5; cursor:pointer;}
+  svg.cos .zona[aria-pressed="true"]{fill:var(--pink); stroke:var(--pink);}
+  .zona-triada{
+    text-align:center; margin-top:8px; font-weight:700; min-height:24px;
+  }
+  .altres-zones{display:flex; gap:7px; flex-wrap:wrap; justify-content:center; margin-top:10px;}
+  .chip{
+    min-height:40px; padding:0 15px; background:var(--bg); border:1px solid var(--line);
+    border-radius:999px; color:var(--text-dim); font-size:14px;
+  }
+  .chip[aria-pressed="true"]{background:var(--pink); border-color:var(--pink); color:#fff; font-weight:600;}
+
+  /* ---------- Resum ---------- */
+  .xifres{display:grid; grid-template-columns:1fr 1fr; gap:10px; margin-bottom:12px;}
+  .xifra{background:var(--bg-raised); border:1px solid var(--line); border-radius:14px; padding:13px;}
+  .xifra .k{font-size:11px; letter-spacing:.14em; text-transform:uppercase; color:var(--text-dim);}
+  .xifra .v{font-size:25px; font-weight:800; line-height:1.15;}
+  .xifra .u{font-size:13px; color:var(--text-dim);}
+  .barres{display:flex; align-items:flex-end; gap:7px; height:110px; margin-top:6px;}
+  .barres .b{flex:1; display:flex; flex-direction:column; justify-content:flex-end; height:100%;}
+  .barres .b i{display:block; background:var(--pink-dim); border-radius:4px 4px 0 0; min-height:2px;}
+  .barres .b span{font-size:10px; color:var(--text-dim); text-align:center; margin-top:4px; display:block;}
+
+  /* ---------- Panell ---------- */
+  .alerta{
+    border-radius:12px; padding:11px 13px; margin-bottom:8px;
+    background:var(--bg-raised); border:1px solid var(--line); border-left:4px solid var(--avis);
+  }
+  .alerta.vermella{border-left-color:var(--vermell); background:rgba(255,59,92,.08);}
+  .alerta .qui{font-weight:700;}
+  .alerta .que{font-size:14px; color:var(--text-dim);}
+  .graella-embolcall{overflow-x:auto; margin:0 -14px; padding:0 14px;}
+  table.graella{border-collapse:separate; border-spacing:3px; font-size:13px;}
+  table.graella th{font-size:11px; letter-spacing:.08em; text-transform:uppercase; color:var(--text-dim); font-weight:600; padding:2px;}
+  table.graella td.nom{
+    text-align:left; font-weight:600; white-space:nowrap; padding-right:8px;
+    position:sticky; left:0; background:var(--bg); z-index:2;
+  }
+  table.graella td.cel{
+    width:40px; height:40px; text-align:center; border-radius:8px;
+    background:var(--bg-alt); border:1px solid var(--line); font-weight:700; font-size:12px;
+  }
+  table.graella td.cel.buida{color:var(--text-dim); font-weight:400; opacity:.55;}
+  table.graella td.cel.limita{border-color:var(--vermell); border-width:2px;}
+  table.graella td.cel .punt-mol{display:block; width:5px; height:5px; border-radius:50%; background:var(--avis); margin:1px auto 0;}
+  .barra-compliment{height:9px; background:var(--bg-alt); border-radius:999px; overflow:hidden; margin:8px 0 6px;}
+  .barra-compliment i{display:block; height:100%; background:var(--ok);}
+
+  #toast{
+    position:fixed; z-index:50; left:14px; right:14px;
+    bottom:calc(18px + env(safe-area-inset-bottom));
+    max-width:532px; margin:0 auto;
+    background:var(--bg-alt); border:1px solid var(--line); border-left:3px solid var(--ok);
+    border-radius:12px; padding:13px 14px; font-size:15px;
+    box-shadow:0 8px 24px rgba(0,0,0,.5);
+    transition:opacity .2s ease, transform .2s ease;
+  }
+  #toast.ko{border-left-color:var(--pink);}
+  #toast.fora{opacity:0; transform:translateY(8px); pointer-events:none;}
+</style>
+</head>
+<body>
+
+<!-- ════════ Qui ets ════════ -->
+<section id="vista-qui">
+  <img src="icon-192.png" alt="" class="logo">
+  <h2>Càrregues</h2>
+  <p class="meta" style="text-align:center; margin:0 0 18px" id="qui-sub">Equips de rendiment</p>
+  <p class="nota" id="qui-avis">
+    Aquesta app és <b>només per als equips de rendiment</b>. Si busques la rajola
+    «Com estàs?», és a l'app de jugadores i continua funcionant igual.
+  </p>
+  <div class="camp amagat" id="camp-equip">
+    <label for="equip">Equip</label>
+    <select id="equip"></select>
+  </div>
+  <p class="meta" style="margin:0 0 8px">Tria el teu nom:</p>
+  <div id="llista-qui"></div>
+  <p class="error meta" id="qui-error" style="color:var(--pink); text-align:center"></p>
+  <button class="btn secundari" id="qui-staff" style="margin-top:14px">Sóc del cos tècnic</button>
+</section>
+
+<!-- ════════ App ════════ -->
+<div id="vista-app" class="amagat">
+  <div class="barra">
+    <button class="btn-icona amagat" id="enrere" aria-label="Enrere">←</button>
+    <h1 id="titol">Càrregues</h1>
+    <button class="sync" id="estat-sync"><span class="punt"></span><span id="estat-sync-text">Sincronitzat</span></button>
+  </div>
+  <main id="contingut"></main>
+</div>
+
+<div id="toast" class="amagat"></div>
+
+<!-- ════════ Mapa corporal ════════
+     Vista de front: la meitat esquerra de la pantalla és el costat DRET de
+     la jugadora. Per això cada forma ja porta el costat escrit a data-costat
+     i, a sobre, hi ha les dues etiquetes.                                  -->
+<template id="tpl-cos">
+  <div class="cos-cap"><span>La teva dreta</span><span>La teva esquerra</span></div>
+  <svg class="cos" viewBox="0 0 200 372" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Mapa corporal">
+    <!-- decoració: tors i braços, no es poden triar -->
+    <rect class="decor" x="76" y="64" width="48" height="84" rx="14"/>
+    <rect class="decor" x="48" y="84" width="13" height="62" rx="6"/>
+    <rect class="decor" x="139" y="84" width="13" height="62" rx="6"/>
+
+    <g class="zona" data-zona="Cap / coll" tabindex="0" role="button" aria-pressed="false">
+      <circle cx="100" cy="28" r="20"/>
+      <rect x="92" y="46" width="16" height="14" rx="4"/>
+    </g>
+
+    <ellipse class="zona" data-zona="Espatlla" data-costat="dreta"   cx="62"  cy="74" rx="18" ry="14" tabindex="0" role="button" aria-pressed="false"/>
+    <ellipse class="zona" data-zona="Espatlla" data-costat="esquerra" cx="138" cy="74" rx="18" ry="14" tabindex="0" role="button" aria-pressed="false"/>
+
+    <rect class="zona" data-zona="Maluc" data-costat="dret"    x="70"  y="150" width="26" height="28" rx="9" tabindex="0" role="button" aria-pressed="false"/>
+    <rect class="zona" data-zona="Maluc" data-costat="esquerre" x="104" y="150" width="26" height="28" rx="9" tabindex="0" role="button" aria-pressed="false"/>
+
+    <rect class="zona" data-zona="Cuixa" data-costat="dreta"    x="72"  y="182" width="24" height="54" rx="10" tabindex="0" role="button" aria-pressed="false"/>
+    <rect class="zona" data-zona="Cuixa" data-costat="esquerra" x="104" y="182" width="24" height="54" rx="10" tabindex="0" role="button" aria-pressed="false"/>
+
+    <rect class="zona" data-zona="Genoll" data-costat="dret"    x="72"  y="240" width="24" height="24" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+    <rect class="zona" data-zona="Genoll" data-costat="esquerre" x="104" y="240" width="24" height="24" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+
+    <rect class="zona" data-zona="Bessó" data-costat="dret"    x="74"  y="268" width="21" height="48" rx="9" tabindex="0" role="button" aria-pressed="false"/>
+    <rect class="zona" data-zona="Bessó" data-costat="esquerre" x="105" y="268" width="21" height="48" rx="9" tabindex="0" role="button" aria-pressed="false"/>
+
+    <rect class="zona" data-zona="Turmell" data-costat="dret"    x="75"  y="320" width="19" height="18" rx="6" tabindex="0" role="button" aria-pressed="false"/>
+    <rect class="zona" data-zona="Turmell" data-costat="esquerre" x="106" y="320" width="19" height="18" rx="6" tabindex="0" role="button" aria-pressed="false"/>
+
+    <rect class="zona" data-zona="Peu" data-costat="dret"    x="70"  y="342" width="25" height="20" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+    <rect class="zona" data-zona="Peu" data-costat="esquerre" x="105" y="342" width="25" height="20" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+  </svg>
+  <div class="altres-zones">
+    <button type="button" class="chip zona-boto" data-zona="Esquena" aria-pressed="false">Esquena</button>
+    <button type="button" class="chip zona-boto" data-zona="Altres" aria-pressed="false">Altres</button>
+  </div>
+  <div class="zona-triada meta" id="zona-triada">Toca on et fa mal</div>
+</template>
+
+<script>
+/* ═══════════════════════════════════════════════════════════════════
+   CONFIGURACIÓ
+   ═══════════════════════════════════════════════════════════════════
+   Enganxa aquí la URL acabada en /exec del desplegament de l'Apps
+   Script. És l'únic que cal tocar per posar l'app en marxa.            */
+const CONFIG = {
+  API_URL: "https://script.google.com/macros/s/AKfycbwNqbR0s88KdbwIoUT-jp4FYPX45g0QYjKHWjJaw9Msa2Hr0vI1jHK2FCUU8egeIGWn/exec"
+};
+</script>
+<script src="app.js"></script>
+</body>
+</html>

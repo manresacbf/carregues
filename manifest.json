@@ -1,0 +1,16 @@
+{
+  "name": "Càrregues MCBF",
+  "short_name": "Càrregues",
+  "description": "Com arribes i com acabes l'entrenament — equips de rendiment del Manresa CBF",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#11141a",
+  "theme_color": "#11141a",
+  "orientation": "portrait",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "icon-512-maskable.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
