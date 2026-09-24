@@ -472,6 +472,10 @@ function getPanell_(equip, dilluns) {
         fatiga: a ? a.fatiga : null,
         son: a ? a.son : null,
         molestia: !!(a && a.te_molestia),
+        // La zona i el dolor viatgen amb la cel·la perque el panell pugui
+        // dir on fa mal sense haver d'obrir la fitxa de cada jugadora.
+        zona: (a && a.te_molestia) ? a.zona_molestia : '',
+        dolor: (a && a.te_molestia) ? a.dolor : null,
         limita: !!(a && a.limita),
         te_abans: !!a,
         te_despres: !!p

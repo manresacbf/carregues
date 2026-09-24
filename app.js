@@ -853,6 +853,31 @@ function pintaPanell() {
         '</div>').join('')
     : '<p class="meta" style="margin:0">Cap alerta' + (equipPanell ? ' al ' + esc(equipPanell) : '') + ' aquesta setmana.</p>';
 
+  // Les molesties que no limiten no generen alerta i, fins ara, nomes es
+  // veien entrant a la fitxa de cada jugadora d'una en una.
+  const molesties = [];
+  visibles.forEach((j) => j.dies.forEach((d) => {
+    if (d.molestia) {
+      molesties.push({ nom: j.nom, data: d.data, zona: d.zona, dolor: d.dolor, limita: d.limita });
+    }
+  }));
+  molesties.sort((a, b) => (b.limita - a.limita) || b.data.localeCompare(a.data));
+
+  const blocMolesties =
+    '<div class="card"><div class="eyebrow">Mol&egrave;sties d&#39;aquesta setmana</div>' +
+    (molesties.length
+      ? molesties.map((m) =>
+          '<div class="molestia' + (m.limita ? ' limita' : '') + '">' +
+            '<span class="qui">' + esc(m.nom) + '</span>' +
+            '<span class="on">' + esc(m.zona || 'zona sense indicar') +
+              (m.dolor !== null && m.dolor !== '' && m.dolor !== undefined
+                ? ' &middot; dolor ' + esc(m.dolor) + '/10' : '') + '</span>' +
+            '<span class="quan">' + esc(diaCurt(m.data)) + ' ' + esc(formatDia(m.data)) +
+              (m.limita ? ' &middot; <b>la limita per entrenar</b>' : '') + '</span>' +
+          '</div>').join('')
+      : '<p class="meta" style="margin:0">Cap mol&egrave;stia declarada aquesta setmana.</p>') +
+    '</div>';
+
   const capsDies = panell.dies.map((d) =>
     '<th' + (diesEsperats.indexOf(d) !== -1 ? ' class="dia-entreno"' : '') + '>' +
     esc(diaCurt(d)) + '<br>' + esc(d.slice(8, 10)) + '</th>').join('');
@@ -888,6 +913,7 @@ function pintaPanell() {
     filtres +
 
     '<div class="card"><div class="eyebrow">Alertes actives</div>' + blocAlertes + '</div>' +
+    blocMolesties +
 
     '<div class="card">' +
       '<div class="eyebrow">Compliment' + (equipPanell ? ' · ' + esc(equipPanell) : '') + '</div>' +
@@ -936,7 +962,13 @@ function pintaPanell() {
     }
     if (d.fatiga) trossos.push('cansament ' + d.fatiga + '/5');
     if (d.son) trossos.push('son ' + d.son + '/5');
-    if (d.molestia) trossos.push(d.limita ? '<b style="color:var(--vermell)">molèstia que la limita</b>' : 'amb molèstia');
+    if (d.molestia) {
+      const on = (d.zona || 'zona sense indicar') +
+        (d.dolor !== null && d.dolor !== '' && d.dolor !== undefined ? ' ' + d.dolor + '/10' : '');
+      trossos.push(d.limita
+        ? '<b style="color:var(--vermell)">' + esc(on) + ' &mdash; la limita</b>'
+        : esc(on));
+    }
     $('#detall-cel').innerHTML = trossos.join(' — ');
     $$('#contingut td.cel.triada').forEach((x) => x.classList.remove('triada'));
     td.classList.add('triada');
