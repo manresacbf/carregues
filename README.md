@@ -95,10 +95,18 @@ Atenció a la direcció de les escales, perquè d'aquí surt una alerta: a **son
 | Alerta | Condició | Nivell |
 |---|---|---|
 | Dolor que limita | `limita = SI` | Vermella |
-| Fatiga sostinguda | `fatiga ≥ 4` dos dies consecutius | Taronja |
+| Fatiga sostinguda | `fatiga ≥ 4` en **dues respostes seguides** | Taronja |
 | Salt de càrrega | `ratio > llindar_carrega` | Taronja |
 
 Surten a dalt de tot del panell, abans de cap taula.
+
+«Dues respostes seguides» i no «dos dies consecutius»: entrenant dilluns,
+dimecres i divendres no hi ha mai dos dies seguits amb resposta, i l'alerta
+no podria saltar mai.
+
+Sota les alertes hi ha el bloc **Molèsties d'aquesta setmana**, que mostra
+també les que no limiten: aquestes no generen alerta i, si no, només es
+veurien entrant a la fitxa de cada jugadora.
 
 ## Manteniment
 

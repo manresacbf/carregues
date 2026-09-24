@@ -436,16 +436,20 @@ function getPanell_(equip, dilluns) {
       }
     });
 
-    // Alerta taronja: fatiga alta dos dies seguits
-    for (var k = 1; k < dies.length; k++) {
-      var ah = perDia[dies[k - 1]].abans, av = perDia[dies[k]].abans;
-      if (ah && av && Number(ah.fatiga) >= 4 && Number(av.fatiga) >= 4) {
+    // Alerta taronja: fatiga alta dos cops seguits.
+    // Compara respostes consecutives, NO dies consecutius del calendari:
+    // entrenant dilluns, dimecres i divendres no hi ha mai dos dies seguits
+    // amb resposta, i l'alerta no podria saltar mai.
+    var ambResposta = dies.filter(function (d) { return perDia[d].abans; });
+    for (var k = 1; k < ambResposta.length; k++) {
+      var ah = perDia[ambResposta[k - 1]].abans, av = perDia[ambResposta[k]].abans;
+      if (Number(ah.fatiga) >= 4 && Number(av.fatiga) >= 4) {
         alertes.push({
           nivell: 'taronja',
           jugadora: j.nom,
           id_jugadora: j.id,
           titol: 'Fatiga sostinguda',
-          detall: 'fatiga ' + ah.fatiga + ' i ' + av.fatiga + ' el ' + dies[k - 1] + ' i el ' + dies[k]
+          detall: 'cansament ' + ah.fatiga + ' i ' + av.fatiga + ' (' + ambResposta[k - 1] + ' i ' + ambResposta[k] + ')'
         });
         break;
       }
