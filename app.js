@@ -65,6 +65,7 @@ let meus = [];                 // registres propis, per al resum
 let pendents = [];
 let staff = { pin: '' };
 let sincronitzant = false;
+let idReintent;
 let equipTriat = '';
 let carregantRoster = false;
 
@@ -232,6 +233,16 @@ async function sincronitza(manual) {
   pintaSync();
   try {
     const res = await api('sync', { operacions: pendents.map((o) => ({ opId: o.opId, payload: o.payload })) });
+
+    // El full atén les escriptures d'una en una. Si totes envien alhora en
+    // acabar l'entrenament, algunes es troben la porta ocupada: això no és
+    // cap error, és esperar i tornar-hi, i la jugadora no se n'ha d'assabentar.
+    if (res && res.ocupat) {
+      clearTimeout(idReintent);
+      idReintent = setTimeout(() => sincronitza(), 8000 + Math.random() * 12000);
+      if (manual) avisa('Hi ha cua per desar. Es tornarà a provar sol.');
+      return;
+    }
     if (!res || !res.ok) throw new Error((res && res.error) || 'El full no ha contestat bé');
 
     const perId = {};

@@ -759,19 +759,24 @@ function doGet() {
     .setMimeType(ContentService.MimeType.TEXT);
 }
 
+/**
+ * Una sola porta d'entrada.
+ *
+ * El pany (LockService) NOMES envolta les escriptures. Abans l'agafava tot,
+ * i obrir el panell —que son uns 7 segons— deixava clavades totes les
+ * jugadores que en aquell moment enviaven el seu registre. Amb 12 enviaments
+ * alhora, l'ultim trigava 28 segons i un es perdia per temps d'espera.
+ *
+ * Quan el pany no s'allibera a temps es retorna 'ocupat', que el mobil
+ * distingeix d'un error de debo: manté el registre a la cua i ho torna a
+ * provar sol una estona despres, sense dir res a la jugadora.
+ */
 function doPost(e) {
-  var lock = LockService.getScriptLock();
-  try {
-    lock.waitLock(25000);
-  } catch (err) {
-    return json_({ ok: false, error: 'El full esta ocupat. Torna-ho a provar.' });
-  }
-
   try {
     var body = JSON.parse(e.postData.contents);
     var action = text_(body.action);
 
-    // Accions obertes: nomes la llista de noms i desar el propi registre.
+    /* ---- Lectures obertes: sense pany ---- */
     if (action === 'getJugadores') {
       var conf = configuracio_();
       return json_({
@@ -784,21 +789,25 @@ function doPost(e) {
         }
       });
     }
-    if (action === 'saveRegistre') return desaRegistre_(body.payload || {});
-    if (action === 'sync') {
-      var resultats = (body.operacions || []).map(function (op) {
-        var r;
-        try {
-          r = JSON.parse(desaRegistre_(op.payload || {}).getContent());
-        } catch (err2) {
-          r = { ok: false, error: String(err2 && err2.message ? err2.message : err2) };
-        }
-        return { opId: text_(op.opId), ok: !!r.ok, error: r.ok ? '' : (r.error || 'Error') };
-      });
-      return json_({ ok: true, data: { resultats: resultats } });
+
+    /* ---- Escriptures: aqui si, d'una en una ---- */
+    if (action === 'saveRegistre' || action === 'sync') {
+      var lock = LockService.getScriptLock();
+      try {
+        lock.waitLock(25000);
+      } catch (err) {
+        return json_({ ok: false, ocupat: true,
+                       error: 'El full esta ocupat. Es tornara a provar tot sol.' });
+      }
+      try {
+        if (action === 'saveRegistre') return desaRegistre_(body.payload || {});
+        return sync_(body.operacions);
+      } finally {
+        lock.releaseLock();
+      }
     }
 
-    // A partir d'aqui, tot demana el PIN del cos tecnic.
+    /* ---- La resta demana el PIN del cos tecnic (i tampoc no bloqueja) ---- */
     var qui = identifica_(body.pin_staff);
     if (!qui.ok) return json_(qui);
 
@@ -809,7 +818,19 @@ function doPost(e) {
     }
   } catch (err) {
     return json_({ ok: false, error: String(err && err.message ? err.message : err) });
-  } finally {
-    lock.releaseLock();
   }
+}
+
+/** Buida la cua d'un mobil: una sola espera de pany per a tots els registres. */
+function sync_(operacions) {
+  var resultats = (operacions || []).map(function (op) {
+    var r;
+    try {
+      r = JSON.parse(desaRegistre_(op.payload || {}).getContent());
+    } catch (err) {
+      r = { ok: false, error: String(err && err.message ? err.message : err) };
+    }
+    return { opId: text_(op.opId), ok: !!r.ok, error: r.ok ? '' : (r.error || 'Error') };
+  });
+  return json_({ ok: true, data: { resultats: resultats } });
 }
