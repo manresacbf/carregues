@@ -50,6 +50,15 @@ var FULLS = {
                 'minuts', 'carrega', 'comentari', 'timestamp'],
     text: ['id', 'id_jugadora', 'data', 'moment', 'te_molestia', 'limita', 'timestamp']
   },
+  usuaris: {
+    nom: 'Usuaris',
+    clau: 'pin',
+    // rol: 'director' (ho veu tot) o 'entrenador' (nomes els seus equips).
+    // equips: llista separada per comes. Un entrenador sense equips no veu
+    // res: val mes que es quedi curt que no pas que ho obri tot per error.
+    capcalera: ['pin', 'nom', 'rol', 'equips'],
+    text: ['pin', 'equips']
+  },
   config: {
     nom: 'Config',
     clau: 'clau',
@@ -196,21 +205,49 @@ function configuracio_() {
   return c;
 }
 
-function validaPinStaff_(pin) {
+/**
+ * Qui truca. Busca el PIN a la pestanya Usuaris i, si encara es buida, el
+ * pin_staff de Config continua valent com a director: aixi res no es trenca
+ * mentre no s'omple.
+ *
+ * Retorna { ok:true, usuari:{ nom, rol, equips } }. Un director te equips
+ * buit i ho veu tot; un entrenador nomes veu els equips de la seva fila.
+ */
+function identifica_(pin) {
   var props = PropertiesService.getScriptProperties();
   var fins = Number(props.getProperty('bloqueig_fins') || 0);
   if (fins && Date.now() < fins) {
     return { ok: false, error: 'Massa intents. Torna-ho a provar en uns minuts.' };
   }
-  var esperat = text_(configuracio_().pin_staff);
-  if (!esperat) return { ok: false, error: 'No hi ha cap pin_staff a la pestanya Config.' };
 
-  if (text_(pin) === esperat) {
+  pin = text_(pin);
+  var trobat = null;
+
+  if (pin) {
+    var usuaris = [];
+    try { usuaris = files_('usuaris'); } catch (err) { usuaris = []; }   // encara sense pestanya
+    usuaris.forEach(function (u) {
+      if (trobat || text_(u.pin) !== pin) return;
+      var rol = text_(u.rol).toLowerCase();
+      var esEntrenador = rol.indexOf('entrenador') === 0;
+      trobat = {
+        nom: text_(u.nom) || 'Sense nom',
+        rol: esEntrenador ? 'entrenador' : 'director',
+        equips: esEntrenador ? llista_(u.equips) : []
+      };
+    });
+    if (!trobat && pin === text_(configuracio_().pin_staff)) {
+      trobat = { nom: 'Cos tecnic', rol: 'director', equips: [] };
+    }
+  }
+
+  if (trobat) {
     props.deleteProperty('errades');
     props.deleteProperty('errades_des_de');
     props.deleteProperty('bloqueig_fins');
-    return { ok: true };
+    return { ok: true, usuari: trobat };
   }
+
   var desDe = Number(props.getProperty('errades_des_de') || 0);
   var n = Number(props.getProperty('errades') || 0);
   if (!desDe || Date.now() - desDe > FINESTRA_MS) { desDe = Date.now(); n = 0; }
@@ -219,6 +256,15 @@ function validaPinStaff_(pin) {
   props.setProperty('errades', String(n));
   if (n >= MAX_ERRADES) props.setProperty('bloqueig_fins', String(Date.now() + FINESTRA_MS));
   return { ok: false, error: 'PIN' };
+}
+
+/**
+ * Equips que pot veure aquest usuari. null vol dir tots; una llista buida,
+ * cap. El filtratge es fa AQUI, al servidor: si es fes al mobil, qualsevol
+ * podria canviar la peticio i veure els altres equips igualment.
+ */
+function equipsPermesos_(usuari) {
+  return (usuari && usuari.rol === 'director') ? null : ((usuari && usuari.equips) || []);
 }
 
 /* ------------------------------------------------------------------ *
@@ -383,12 +429,17 @@ function ratioDe_(regs, idJ, dilluns) {
  *  Panell del cos tecnic                                              *
  * ------------------------------------------------------------------ */
 
-function getPanell_(equip, dilluns) {
+function getPanell_(equip, dilluns, usuari) {
   var conf = configuracio_();
   var llindar = num_(conf.llindar_carrega) || 1.3;
   var diesEntreno = llista_(conf.dies_recordatori);
   var regs = registres_();
-  var jugs = jugadores_(text_(equip), true);
+  // Nomes les jugadores que aquest usuari pot veure. Un entrenador sense
+  // equips a la seva fila no en veu cap.
+  var permesos = equipsPermesos_(usuari);
+  var jugs = jugadores_(text_(equip), true).filter(function (j) {
+    return !permesos || permesos.indexOf(j.equip) !== -1;
+  });
   var avui = avuiISO_();
 
   var dies = [];
@@ -502,6 +553,7 @@ function getPanell_(equip, dilluns) {
     ok: true,
     data: {
       setmana: dilluns,
+      usuari: usuari,
       dies: dies,
       dies_esperats: diesEsperats,
       llindar: llindar,
@@ -520,11 +572,18 @@ function getPanell_(equip, dilluns) {
 }
 
 /** Serie historica d'una jugadora. Nomes amb pin_staff. */
-function getJugadoraStaff_(id, nSetmanes) {
+function getJugadoraStaff_(id, nSetmanes, usuari) {
   id = text_(id);
   var n = Math.min(Math.max(Number(nSetmanes) || 8, 1), 20);
   var j = jugadores_('', false).filter(function (x) { return x.id === id; })[0];
   if (!j) return json_({ ok: false, error: 'No hi ha cap jugadora amb aquest id.' });
+
+  // Sense aquesta comprovacio, un entrenador podria demanar la fitxa de
+  // qualsevol jugadora del club posant-hi l'id a ma.
+  var permesos = equipsPermesos_(usuari);
+  if (permesos && permesos.indexOf(j.equip) === -1) {
+    return json_({ ok: false, error: 'Aquesta jugadora no es d'un equip teu.' });
+  }
 
   var regs = registres_().filter(function (r) { return r.id_jugadora === id; });
   var avui = avuiISO_();
@@ -617,12 +676,12 @@ function doPost(e) {
     }
 
     // A partir d'aqui, tot demana el PIN del cos tecnic.
-    var pin = validaPinStaff_(body.pin_staff);
-    if (!pin.ok) return json_(pin);
+    var qui = identifica_(body.pin_staff);
+    if (!qui.ok) return json_(qui);
 
     switch (action) {
-      case 'getPanell':   return getPanell_(body.equip, dataISO_(body.setmana));
-      case 'getJugadora': return getJugadoraStaff_(body.id, body.n_setmanes);
+      case 'getPanell':   return getPanell_(body.equip, dataISO_(body.setmana), qui.usuari);
+      case 'getJugadora': return getJugadoraStaff_(body.id, body.n_setmanes, qui.usuari);
       default:            return json_({ ok: false, error: 'Accio desconeguda: ' + action });
     }
   } catch (err) {

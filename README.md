@@ -30,8 +30,9 @@ càlcul propi, desplegament d'Apps Script propi i PIN propi.
    `Registres` i `Config`.
 4. Omple **`Jugadores`**: una fila per jugadora amb `id` (qualsevol text únic:
    `j01`, `j02`…), `nom`, `dorsal`, `equip` i `activa` = `SI`.
-5. A **`Config`**, canvia el `pin_staff` i repassa la resta de claus.
-6. **Desplega → Nou desplegament → Aplicació web** (executant com a tu, accés
+5. Omple **`Usuaris`**: una fila per persona del cos tècnic (vegeu *Qui veu què*).
+6. A **`Config`**, canvia el `pin_staff` i repassa la resta de claus.
+7. **Desplega → Nou desplegament → Aplicació web** (executant com a tu, accés
    per a qualsevol persona) i enganxa la URL `/exec` a `CONFIG.API_URL`, dins
    `index.html`.
 
@@ -58,6 +59,30 @@ Com que Pages demana repositori públic, la URL `/exec` del full és visible.
 No dona accés a res: la llista de noms és l'única cosa que es pot llegir sense
 `pin_staff`, i tota la resta el demana. Val la pena, tot i això, que el
 `pin_staff` sigui de 6 dígits.
+
+## Qui veu què
+
+Cada persona del cos tècnic té el seu PIN a la pestanya **`Usuaris`**:
+
+| Columna | Què hi va |
+|---|---|
+| `pin` | El seu codi d'entrada. Canviar-lo o esborrar la fila li treu l'accés |
+| `nom` | Surt a dalt del panell, perquè se sàpiga amb qui s'ha entrat |
+| `rol` | `director` (ho veu tot) o `entrenador` (només els seus equips) |
+| `equips` | Els seus equips, separats per comes. Només compta si és `entrenador` |
+
+Un **entrenador sense cap equip a la seva fila no veu cap jugadora**. És a
+posta: val més que es quedi curt que no pas que ho obri tot per una casella
+mal omplerta.
+
+Mentre la pestanya `Usuaris` sigui buida, el `pin_staff` de `Config` continua
+funcionant com a director, així que res no es trenca abans d'omplir-la.
+
+**El filtratge es fa al servidor**, no al mòbil: `getPanell` només envia les
+jugadores dels equips permesos, i `getJugadora` refusa la fitxa d'una jugadora
+d'un altre equip. Si es fes al mòbil, un entrenador podria canviar la petició
+i veure-ho tot igualment. Els xips de filtre del panell són comoditat visual,
+no una barrera.
 
 ## Privacitat
 

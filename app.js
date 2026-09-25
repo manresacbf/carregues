@@ -855,6 +855,17 @@ function pintaPanell() {
   const max = Math.max.apply(null, visibles.map((j) =>
     Math.max.apply(null, j.dies.map((d) => d.carrega || 0).concat([0]))).concat([1]));
 
+  // Qui ha entrat i fins on arriba. El filtratge de debò es fa al full;
+  // això només és per saber què estàs mirant.
+  const u = panell.usuari || {};
+  const seus = (u.equips || []).join(', ');
+  const quiSoc = u.nom
+    ? '<p class="meta" style="margin:-2px 0 10px; text-align:center">' + esc(u.nom) + ' · ' +
+      (u.rol === 'director'
+        ? 'veus tots els equips'
+        : (seus ? 'veus ' + esc(seus) : 'no tens cap equip assignat')) + '</p>'
+    : '';
+
   const filtres = equips.length > 1
     ? '<div class="filtres-equip">' +
         '<button type="button" class="chip" data-equip="" aria-pressed="' + (!equipPanell) + '">Tots</button>' +
@@ -928,6 +939,7 @@ function pintaPanell() {
       '<span class="meta" style="flex:1; text-align:center">Setmana del ' + esc(formatDia(panell.setmana)) + '</span>' +
       '<button type="button" class="chip" id="setm-seg">→</button>' +
     '</div>' +
+    quiSoc +
     filtres +
 
     '<div class="card"><div class="eyebrow">Alertes actives</div>' + blocAlertes + '</div>' +
