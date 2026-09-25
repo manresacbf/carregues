@@ -1,6 +1,6 @@
 {
-  "name": "Càrregues MCBF",
-  "short_name": "Càrregues",
+  "name": "Rendiment MCBF",
+  "short_name": "Rendiment",
   "description": "Com arribes i com acabes l'entrenament — equips de rendiment del Manresa CBF",
   "start_url": "./index.html",
   "scope": "./",

@@ -1,5 +1,5 @@
 /* ═══════════════════════════════════════════════════════════════════
-   Càrregues MCBF — lògica de l'app
+   Rendiment MCBF — lògica de l'app
    ═══════════════════════════════════════════════════════════════════
    Quatre idees que expliquen la resta del fitxer:
 
@@ -372,7 +372,7 @@ function ruta() {
    ───────────────────────────────────────────────────────────────────── */
 
 function pintaInici() {
-  $('#titol').textContent = 'Càrregues';
+  $('#titol').textContent = 'Rendiment';
   const avui = avuiISO();
   const a = registreDe(avui, 'abans');
   const d = registreDe(avui, 'despres');
