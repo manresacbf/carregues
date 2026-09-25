@@ -260,7 +260,7 @@ async function sincronitza(manual) {
 
 async function carregaRoster(silenci) {
   carregantRoster = true;
-  if (!jo) pintaQui();
+  if (!jo && soAlSelectorDeNoms()) pintaQui();
   try {
     const res = await api('getJugadores', { equip: equipTriat }, 3);
     if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
@@ -277,12 +277,19 @@ async function carregaRoster(silenci) {
         '<button type="button" class="chip" id="qui-reintenta" style="min-height:34px">Tornar-ho a provar</button>';
       $('#qui-reintenta').addEventListener('click', () => {
         $('#qui-error').textContent = '';
-        carregaRoster(false).then(() => { if (!jo) pintaQui(); });
+        carregaRoster(false).then(() => { if (!jo && soAlSelectorDeNoms()) pintaQui(); });
       });
     }
     carregantRoster = false;
     return false;
   }
+}
+
+/** Si l'usuari ja ha marxat cap al PIN del cos tècnic, la llista de noms
+    que arriba tard no l'ha de tornar enrere. */
+function soAlSelectorDeNoms() {
+  const v = $('#vista-qui');
+  return v && !v.classList.contains('amagat');
 }
 
 function pintaQui() {
@@ -878,13 +885,38 @@ function pintaPanell() {
       '</div>'
     : '';
 
-  const blocAlertes = alertes.length
-    ? alertes.map((a) =>
-        '<div class="alerta ' + (a.nivell === 'vermella' ? 'vermella' : '') + '">' +
-          '<div class="qui">' + esc(a.jugadora) + ' · ' + esc(a.titol) + '</div>' +
-          '<div class="que">' + esc(a.detall) + '</div>' +
-        '</div>').join('')
-    : '<p class="meta" style="margin:0">Cap alerta' + (equipPanell ? ' al ' + esc(equipPanell) : '') + ' aquesta setmana.</p>';
+  // Agrupades per jugadora: si li fa mal tres dies seguits és una jugadora
+  // amb un problema, no tres alertes. Amb el club sencer, sense agrupar,
+  // aquest bloc feia dues pantalles i mitja abans d'arribar a res més.
+  const perJugadora = [];
+  const indexAlertes = {};
+  alertes.forEach((a) => {
+    let g = indexAlertes[a.id_jugadora];
+    if (!g) {
+      g = { jugadora: a.jugadora, id: a.id_jugadora, vermella: false, motius: [] };
+      indexAlertes[a.id_jugadora] = g;
+      perJugadora.push(g);
+    }
+    if (a.nivell === 'vermella') g.vermella = true;
+    g.motius.push(a);
+  });
+  perJugadora.sort((a, b) => (b.vermella ? 1 : 0) - (a.vermella ? 1 : 0));
+
+  const MAX_VISIBLES = 5;
+  const blocAlertes = perJugadora.length
+    ? perJugadora.map((g, i) =>
+        '<div class="alerta' + (g.vermella ? ' vermella' : '') +
+          (i >= MAX_VISIBLES ? ' extra amagat' : '') + '">' +
+          '<div class="qui">' + esc(g.jugadora) + '</div>' +
+          g.motius.map((m) =>
+            '<div class="que"><b>' + esc(m.titol) + '</b> · ' + esc(m.detall) + '</div>').join('') +
+        '</div>').join('') +
+      (perJugadora.length > MAX_VISIBLES
+        ? '<button type="button" class="chip" id="mes-alertes" style="margin-top:4px">' +
+          'Veure les ' + (perJugadora.length - MAX_VISIBLES) + ' restants</button>'
+        : '')
+    : '<p class="meta" style="margin:0">Cap alerta' +
+      (equipPanell ? ' al ' + esc(equipPanell) : '') + ' aquesta setmana.</p>';
 
   // Les molesties que no limiten no generen alerta i, fins ara, nomes es
   // veien entrant a la fitxa de cada jugadora d'una en una.
@@ -899,8 +931,9 @@ function pintaPanell() {
   const blocMolesties =
     '<div class="card"><div class="eyebrow">Mol&egrave;sties d&#39;aquesta setmana</div>' +
     (molesties.length
-      ? molesties.map((m) =>
-          '<div class="molestia' + (m.limita ? ' limita' : '') + '">' +
+      ? molesties.map((m, i) =>
+          '<div class="molestia' + (m.limita ? ' limita' : '') +
+            (i >= MAX_VISIBLES ? ' extra amagat' : '') + '">' +
             '<span class="qui">' + esc(m.nom) + '</span>' +
             '<span class="on">' + esc(m.zona || 'zona sense indicar') +
               (m.dolor !== null && m.dolor !== '' && m.dolor !== undefined
@@ -909,6 +942,10 @@ function pintaPanell() {
               (m.limita ? ' &middot; <b>la limita per entrenar</b>' : '') + '</span>' +
           '</div>').join('')
       : '<p class="meta" style="margin:0">Cap mol&egrave;stia declarada aquesta setmana.</p>') +
+    (molesties.length > MAX_VISIBLES
+      ? '<button type="button" class="chip" id="mes-molesties" style="margin-top:10px">' +
+        'Veure les ' + (molesties.length - MAX_VISIBLES) + ' restants</button>'
+      : '') +
     '</div>';
 
   const capsDies = panell.dies.map((d) =>
@@ -982,6 +1019,15 @@ function pintaPanell() {
     '</div>' +
 
     '<button class="btn secundari" id="surt-staff">Sortir del panell</button>';
+
+  [['#mes-alertes', '.alerta.extra'], ['#mes-molesties', '.molestia.extra']].forEach((parell) => {
+    const boto = $(parell[0]);
+    if (!boto) return;
+    boto.addEventListener('click', () => {
+      $$(parell[1]).forEach((x) => x.classList.remove('amagat'));
+      boto.classList.add('amagat');
+    });
+  });
 
   $$('#contingut [data-equip]').forEach((b) => b.addEventListener('click', () => {
     equipPanell = b.getAttribute('data-equip');
@@ -1122,7 +1168,9 @@ async function arrenca() {
   } else {
     pintaQui();                 // amb el que hi hagi desat, perquè es vegi de seguida
     await carregaRoster(false);
-    if (!jo) pintaQui();
+    // La llista pot trigar 10 segons: si mentrestant ha entrat al panell,
+    // no se l'ha de fer fora.
+    if (!jo && soAlSelectorDeNoms()) pintaQui();
   }
 
   if ('serviceWorker' in navigator) {
