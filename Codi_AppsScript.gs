@@ -45,7 +45,10 @@ var FULLS = {
     // La clau real d'un registre no es l'id sino el trio jugadora+dia+moment:
     // vegeu desaRegistre_(). L'id nomes identifica l'enviament del mobil.
     clau: 'id',
-    capcalera: ['id', 'id_jugadora', 'data', 'moment', 'son', 'fatiga', 'anim',
+    // nom_jugadora es nomes per poder llegir el full amb ulls humans: qui mana
+    // es id_jugadora. Si canvia un nom a Jugadores, les files velles conserven
+    // el que hi havia el dia que es van escriure.
+    capcalera: ['id', 'id_jugadora', 'nom_jugadora', 'data', 'moment', 'son', 'fatiga', 'anim',
                 'te_molestia', 'zona_molestia', 'dolor', 'limita', 'duresa',
                 'minuts', 'carrega', 'comentari', 'timestamp'],
     text: ['id', 'id_jugadora', 'data', 'moment', 'te_molestia', 'limita', 'timestamp']
@@ -98,6 +101,18 @@ function setup() {
       sh.setFrozenRows(1);
     }
     var caps = capcalera_(sh);
+
+    // Columnes noves d'una versio posterior: s'afegeixen al final, sense
+    // moure res del que ja hi ha. L'ordre no importa, el codi hi accedeix
+    // sempre pel nom de la capcalera.
+    var falten = def.capcalera.filter(function (c) { return caps.indexOf(c) === -1; });
+    if (falten.length && caps.length) {
+      var nova = sh.getRange(1, caps.length + 1, 1, falten.length);
+      nova.setValues([falten]);
+      nova.setFontWeight('bold');
+      caps = capcalera_(sh);
+    }
+
     (def.text || []).forEach(function (nomCol) {
       var i = caps.indexOf(nomCol);
       if (i !== -1) sh.getRange(2, i + 1, sh.getMaxRows() - 1, 1).setNumberFormat('@');
@@ -109,7 +124,38 @@ function setup() {
   var afegir = CONFIG_INICIAL.filter(function (c) { return existents.indexOf(c[0]) === -1; });
   if (afegir.length) conf.getRange(conf.getLastRow() + 1, 1, afegir.length, 2).setValues(afegir);
 
-  ss.toast('Pestanyes preparades. Omple Jugadores i canvia el pin_staff.', 'Càrregues MCBF', 8);
+  var noms = omplirNomsJugadores_();
+  ss.toast('Pestanyes preparades' + (noms ? ' · ' + noms + ' noms omplerts' : '') +
+           '. Omple Jugadores i Usuaris.', 'Rendiment MCBF', 8);
+}
+
+/**
+ * Posa el nom a les files de Registres que encara no en tinguin. S'executa
+ * dins de setup(), aixi que tornar-lo a executar es sempre segur: nomes toca
+ * les caselles buides.
+ */
+function omplirNomsJugadores_() {
+  var sh = full_('registres');
+  var ultima = sh.getLastRow();
+  if (ultima < 2) return 0;
+
+  var caps = capcalera_(sh);
+  var iJ = caps.indexOf('id_jugadora'), iN = caps.indexOf('nom_jugadora');
+  if (iJ === -1 || iN === -1) return 0;
+
+  var noms = {};
+  jugadores_('', false).forEach(function (j) { noms[j.id] = j.nom; });
+
+  var rang = sh.getRange(2, 1, ultima - 1, caps.length);
+  var dades = rang.getValues();
+  var canviats = 0;
+  dades.forEach(function (fila) {
+    if (text_(fila[iN])) return;
+    var nom = noms[text_(fila[iJ])];
+    if (nom) { fila[iN] = nom; canviats++; }
+  });
+  if (canviats) rang.setValues(dades);
+  return canviats;
 }
 
 /* ------------------------------------------------------------------ *
@@ -382,6 +428,7 @@ function desaRegistre_(p) {
   var fila = {
     id: text_(p.id) || Utilities.getUuid(),
     id_jugadora: idJ,
+    nom_jugadora: jug.nom,
     data: data,
     moment: moment,
     son: moment === 'abans' ? num_(p.son) : '',

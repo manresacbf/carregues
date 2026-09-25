@@ -60,6 +60,22 @@ No dona accés a res: la llista de noms és l'única cosa que es pot llegir sens
 `pin_staff`, i tota la resta el demana. Val la pena, tot i això, que el
 `pin_staff` sigui de 6 dígits.
 
+## Llegir el full amb ulls humans
+
+La pestanya `Registres` té una columna **`nom_jugadora`** que el full omple
+sol en desar. Qui mana segueix sent `id_jugadora`: el nom hi és només per
+poder llegir el full sense anar comparant identificadors. Si canvia un nom a
+`Jugadores`, les files velles conserven el que hi havia el dia que es van
+escriure.
+
+**No hi posis fórmules (`VLOOKUP` i companyia) a mà.** Quan una jugadora
+actualitza un registre, el codi reescriu la fila sencera i se't menjaria la
+fórmula. Si et falta una dada al full, digues-ho i s'afegeix al codi.
+
+Les columnes **es poden reordenar** com vulguis: tot s'hi accedeix pel nom de
+la capçalera, mai per posició. I `setup()` afegeix les columnes que falten
+sense moure res del que ja hi ha, així que es pot tornar a executar sempre.
+
 ## Qui veu què
 
 Cada persona del cos tècnic té el seu PIN a la pestanya **`Usuaris`**:
