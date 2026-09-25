@@ -781,6 +781,24 @@ function variacio(ratio) {
   return (ratio === null || ratio === undefined) ? null : Math.round((ratio - 1) * 100);
 }
 
+/**
+ * Quins dies es compten per al compliment. No n'hi ha prou amb els dies
+ * de 'dies_recordatori': és una sola llista per a tot el club i cada equip
+ * entrena dies diferents, de manera que una resposta d'un dia "no previst"
+ * no comptava i la jugadora sortia com si no hagués contestat mai.
+ * Per això s'hi afegeix qualsevol dia en què algú hagi respost.
+ */
+function diesComptats(visibles) {
+  const avui = avuiISO();
+  const configurats = panell.dies_esperats || [];
+  const ambActivitat = {};
+  visibles.forEach((j) => j.dies.forEach((d) => {
+    if (d.te_abans || d.te_despres) ambActivitat[d.data] = true;
+  }));
+  return (panell.dies || []).filter((d) =>
+    d <= avui && (configurats.indexOf(d) !== -1 || ambActivitat[d]));
+}
+
 /** Compliment recalculat només amb les jugadores que es veuen ara. */
 function complimentDe(visibles, diesEsperats) {
   let rebuts = 0;
@@ -826,7 +844,7 @@ function pintaPanell() {
 
   const equips = equipsDelPanell();
   const visibles = jugadoresVisibles();
-  const diesEsperats = panell.dies_esperats || [];
+  const diesEsperats = diesComptats(visibles);
   const c = complimentDe(visibles, diesEsperats);
 
   // Les alertes segueixen el filtre: si mires el U15, les del U13 no hi pinten res.
@@ -921,9 +939,13 @@ function pintaPanell() {
       '<div class="barra-compliment"><i style="width:' + (c.percentatge || 0) + '%"></i></div>' +
       '<p class="meta" style="margin:0">' + c.rebuts + ' de ' + c.esperats + ' respostes esperades · ' +
         visibles.length + (visibles.length === 1 ? ' jugadora' : ' jugadores') + '</p>' +
+      '<p class="meta" style="margin:6px 0 0">Dies comptats: ' +
+        (diesEsperats.length
+          ? diesEsperats.map((d) => esc(diaCurt(d)) + ' ' + esc(d.slice(8, 10))).join(', ')
+          : 'cap encara') + '.</p>' +
       (c.sense.length
-        ? '<p class="meta" style="margin:8px 0 0"><b>No han contestat gens:</b><br>' + esc(c.sense.join(', ')) + '</p>'
-        : '<p class="meta" style="margin:8px 0 0">Han contestat totes.</p>') +
+        ? '<p class="meta" style="margin:8px 0 0"><b>Sense cap resposta aquests dies:</b><br>' + esc(c.sense.join(', ')) + '</p>'
+        : '<p class="meta" style="margin:8px 0 0">Totes han contestat algun dia.</p>') +
     '</div>' +
 
     '<div class="card">' +
