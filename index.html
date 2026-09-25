@@ -155,8 +155,12 @@
   .cos-cap{display:flex; justify-content:space-between; font-size:11px; letter-spacing:.12em;
            text-transform:uppercase; color:var(--text-dim); padding:0 6px 4px;}
   svg.cos{display:block; width:100%; max-width:260px; margin:0 auto;}
-  svg.cos .decor{fill:var(--bg-alt); stroke:var(--line); stroke-width:1.5;}
-  svg.cos .zona{fill:var(--bg-alt); stroke:var(--line); stroke-width:1.5; cursor:pointer;}
+  /* Blancs translúcids en comptes dels colors del fons: sobre la targeta
+     fosca, la silueta amb els colors de sempre gairebé no es veia. Les
+     zones que es poden tocar són més clares que el tors i els braços,
+     que són només decoració. */
+  svg.cos .decor{fill:rgba(255,255,255,.05); stroke:rgba(255,255,255,.15); stroke-width:1.5;}
+  svg.cos .zona{fill:rgba(255,255,255,.11); stroke:rgba(255,255,255,.32); stroke-width:1.6; cursor:pointer;}
   svg.cos .zona[aria-pressed="true"]{fill:var(--pink); stroke:var(--pink);}
   .zona-triada{
     text-align:center; margin-top:8px; font-weight:700; min-height:24px;

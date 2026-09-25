@@ -1027,6 +1027,12 @@ function pintaPanell() {
         'Punt taronja: molèstia. Vora vermella: la limita. «·»: va contestar abans però no després. ' +
         '«–»: no va contestar.' +
       '</p>' +
+      '<p class="meta" style="margin-top:8px">' +
+        '<b>vs normal</b>: la setmana de cada jugadora comparada amb la mitjana de les seves ' +
+        '3 anteriors, no amb la resta de l&#39;equip. Taronja quan supera el llindar ' +
+        '(' + esc(String(panell.llindar).replace('.', ',')) + '). ' +
+        '«—» vol dir que encara no té 3 setmanes de referència.' +
+      '</p>' +
     '</div>' +
 
     '<button class="btn secundari" id="surt-staff">Sortir del panell</button>';
