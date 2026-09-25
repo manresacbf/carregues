@@ -389,8 +389,8 @@ function pintaInici() {
     '<p class="hola">Hola, ' + esc((jo.nom || '').split(' ')[0]) + '</p>' +
     '<p class="meta" style="margin:0 0 16px">' + esc(jo.equip || '') + '</p>' +
 
-    rajola('#/abans', '🌅', 'Abans de l\'entrenament', 'Com arribes avui', !!a) +
-    rajola('#/despres', '🌙', 'Després de l\'entrenament', 'Com ha anat la sessió', !!d) +
+    rajola('#/abans', '🌅', 'Abans de l\'entrenament', 'Com arribes avui?', !!a) +
+    rajola('#/despres', '🌙', 'Després de l\'entrenament', 'Com ha anat la sessió?', !!d) +
     rajola('#/resum', '📈', 'El meu resum', 'La teva setmana i la teva càrrega', false) +
 
     '<p class="meta" style="text-align:center; margin-top:22px">' +
@@ -733,6 +733,7 @@ function pintaStaffPin() {
     $('#entra').disabled = true;
     $('#entra').textContent = 'Comprovant…';
     staff.pin = pin;
+    equipPanell = '';
     try {
       await demanaPanell(dillunsDe(avuiISO()));
       guarda(CLAUS.staff, staff);
@@ -843,6 +844,9 @@ function pintaPanell() {
   }
 
   const equips = equipsDelPanell();
+  // Un filtre heretat d'una altra sessio deixaria la graella buida sense
+  // manera de treure'l: un entrenador d'un sol equip no veu els xips.
+  if (equipPanell && equips.indexOf(equipPanell) === -1) equipPanell = '';
   const visibles = jugadoresVisibles();
   const diesEsperats = diesComptats(visibles);
   const c = complimentDe(visibles, diesEsperats);
@@ -949,15 +953,19 @@ function pintaPanell() {
       '<div class="eyebrow">Compliment' + (equipPanell ? ' · ' + esc(equipPanell) : '') + '</div>' +
       '<div style="font-size:25px; font-weight:800">' + (c.percentatge === null ? '—' : c.percentatge + '%') + '</div>' +
       '<div class="barra-compliment"><i style="width:' + (c.percentatge || 0) + '%"></i></div>' +
-      '<p class="meta" style="margin:0">' + c.rebuts + ' de ' + c.esperats + ' respostes esperades · ' +
-        visibles.length + (visibles.length === 1 ? ' jugadora' : ' jugadores') + '</p>' +
+      '<p class="meta" style="margin:0">' + (visibles.length
+        ? c.rebuts + ' de ' + c.esperats + ' respostes esperades · ' +
+          visibles.length + (visibles.length === 1 ? ' jugadora' : ' jugadores')
+        : 'Cap jugadora en aquesta vista.') + '</p>' +
       '<p class="meta" style="margin:6px 0 0">Dies comptats: ' +
         (diesEsperats.length
           ? diesEsperats.map((d) => esc(diaCurt(d)) + ' ' + esc(d.slice(8, 10))).join(', ')
           : 'cap encara') + '.</p>' +
       (c.sense.length
         ? '<p class="meta" style="margin:8px 0 0"><b>Sense cap resposta aquests dies:</b><br>' + esc(c.sense.join(', ')) + '</p>'
-        : '<p class="meta" style="margin:8px 0 0">Totes han contestat algun dia.</p>') +
+        : (visibles.length
+            ? '<p class="meta" style="margin:8px 0 0">Totes han contestat algun dia.</p>'
+            : '')) +
     '</div>' +
 
     '<div class="card">' +
@@ -1020,6 +1028,7 @@ function pintaPanell() {
   $('#surt-staff').addEventListener('click', () => {
     staff.pin = '';
     panell = null;
+    equipPanell = '';
     localStorage.removeItem(CLAUS.staff);
     ves(jo ? '#/inici' : '');
     if (!jo) pintaQui();
@@ -1095,7 +1104,13 @@ async function arrenca() {
   $('#qui-staff').addEventListener('click', () => { obreApp('#/staff'); });
   window.addEventListener('hashchange', ruta);
   window.addEventListener('online', () => sincronitza());
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) sincronitza(); });
+  document.addEventListener('visibilitychange', () => {
+    if (document.hidden) return;
+    sincronitza();
+    // El "fet" de les rajoles es d'avui. Si l'app s'ha quedat oberta tota la
+    // nit, en tornar-hi encara mostraria el d'ahir.
+    if (jo && rutaActual().vista === 'inici') pintaInici();
+  });
 
   if (!CONFIG.API_URL) $('#qui-error').textContent = 'Falta enganxar la URL de l\'Apps Script a CONFIG.API_URL.';
 
