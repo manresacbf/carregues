@@ -142,6 +142,27 @@ antiga.
 Si canvies el `.gs`: **Desplega → Gestiona desplegaments → editar → Versió:
 Nova versió**, i la URL `/exec` no canvia.
 
+## Com creix el full
+
+Amb 75 jugadores surten unes 450 files per setmana i unes 18.000 per
+temporada. Prou per sota del límit de Google Sheets (10 milions de cel·les),
+però sí prou per notar-ho si cada operació llegís el full sencer. Per això:
+
+- **En desar un registre** es busca primer a les últimes 1.500 files, que és
+  on cau tot el que s'escriu. Només si no s'hi troba i la data és anterior a
+  aquell tram es llegeix la resta, de manera que no es perd mai la garantia
+  d'una fila per jugadora, dia i moment.
+- **El panell** llegeix la setmana que es mira i 4 més enrere, no tot
+  l'històric. Per trobar per on començar es llegeix només la columna de
+  dates: una columna en comptes de setze.
+- **La fitxa individual** llegeix les setmanes que demana i 3 més, les que
+  necessita el ràtio. Això acota també l'historial de molèsties que hi surt:
+  amb els 8 valors per defecte, uns tres mesos enrere.
+
+El que no s'ha tocat és que Apps Script atén les peticions d'una en una. Si
+totes envien alhora en acabar l'entrenament, es fa cua; la cua del mòbil
+reintenta sola i no es perd res, però algunes veuran «pendent» una estona.
+
 ## Fase posterior, anotada i no feta
 
 El **seguiment del cicle menstrual** queda fora d'aquesta versió a posta. És

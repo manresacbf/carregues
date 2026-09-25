@@ -287,8 +287,46 @@ function jugadores_(equip, nomesActives) {
     });
 }
 
-function registres_() {
-  return files_('registres')
+/**
+ * Registres del full. Amb 'desDe' (YYYY-MM-DD) nomes llegeix les files a
+ * partir d'aquella data: amb 75 jugadores el full arriba a unes 18.000 files
+ * per temporada i llegir-les totes per pintar una setmana no te sentit.
+ *
+ * Per trobar per on comencar es llegeix NOMES la columna de dates (una
+ * columna en comptes de setze) i es busca la primera fila que hi entra.
+ * Es busca de principi a fi a posta: si la cua d'un mobil puja un registre
+ * endarrerit, les files no queden perfectament ordenades, i parant al primer
+ * canvi ens deixariem files bones.
+ */
+function registresDesDe_(desDe) {
+  var sh = full_('registres');
+  var ultima = sh.getLastRow();
+  if (ultima < 2) return [];
+
+  var caps = capcalera_(sh);
+  var inici = 2;
+
+  if (desDe) {
+    var iData = caps.indexOf('data');
+    if (iData !== -1) {
+      var dates = sh.getRange(2, iData + 1, ultima - 1, 1).getValues();
+      inici = ultima + 1;
+      for (var i = 0; i < dates.length; i++) {
+        if (dataISO_(dates[i][0]) >= desDe) { inici = i + 2; break; }
+      }
+      if (inici > ultima) return [];
+    }
+  }
+
+  return sh.getRange(inici, 1, ultima - inici + 1, caps.length).getValues().map(function (fila) {
+    var o = {};
+    caps.forEach(function (nom, k) { if (nom) o[nom] = fila[k]; });
+    return o;
+  });
+}
+
+function registres_(desDe) {
+  return registresDesDe_(desDe)
     .filter(function (f) { return text_(f.id_jugadora) && dataISO_(f.data); })
     .map(function (f) {
       return {
@@ -371,16 +409,49 @@ function desaRegistre_(p) {
   return json_({ ok: true, data: { id: fila.id, carrega: carrega === '' ? null : carrega, actualitzat: !!nFila } });
 }
 
-function trobaRegistre_(sh, caps, idJ, data, moment) {
-  if (sh.getLastRow() < 2) return 0;
+/* Files que es miren de cop abans de plantejar-se llegir el full sencer.
+   Amb 75 jugadores son unes 3 setmanes de registres. */
+var FINESTRA_FILES = 1500;
+
+function cercaRegistre_(sh, caps, primera, ultima, idJ, data, moment) {
+  if (ultima < primera) return 0;
   var iJ = caps.indexOf('id_jugadora'), iD = caps.indexOf('data'), iM = caps.indexOf('moment');
-  var dades = sh.getRange(2, 1, sh.getLastRow() - 1, caps.length).getValues();
+  var dades = sh.getRange(primera, 1, ultima - primera + 1, caps.length).getValues();
   for (var i = 0; i < dades.length; i++) {
     if (text_(dades[i][iJ]) === idJ && dataISO_(dades[i][iD]) === data && text_(dades[i][iM]) === moment) {
-      return i + 2;
+      return i + primera;
     }
   }
   return 0;
+}
+
+/**
+ * Fila d'un registre, si ja hi es. Mira primer l'ultim tram del full, que es
+ * on cau tot el que s'escriu: un registre sempre es d'avui o de fa pocs dies.
+ * Nomes si no el troba I la data que busquem es mes antiga que aquell tram,
+ * llegeix la resta. Aixi el cas de cada dia costa el mateix tant si el full
+ * te 200 files com si en te 20.000, i no es perd mai la garantia d'una sola
+ * fila per jugadora, dia i moment.
+ */
+function trobaRegistre_(sh, caps, idJ, data, moment) {
+  var ultima = sh.getLastRow();
+  if (ultima < 2) return 0;
+
+  var inici = Math.max(2, ultima - FINESTRA_FILES + 1);
+  var trobat = cercaRegistre_(sh, caps, inici, ultima, idJ, data, moment);
+  if (trobat || inici === 2) return trobat;
+
+  // Queda full per mirar: nomes val la pena si el registre es anterior a
+  // la data mes antiga del tram que ja hem recorregut.
+  var iD = caps.indexOf('data');
+  var mesAntiga = '';
+  sh.getRange(inici, iD + 1, ultima - inici + 1, 1).getValues().forEach(function (f) {
+    var d = dataISO_(f[0]);
+    if (d && (!mesAntiga || d < mesAntiga)) mesAntiga = d;
+  });
+  if (mesAntiga && data >= mesAntiga) return 0;
+
+  return cercaRegistre_(sh, caps, 2, inici - 1, idJ, data, moment);
 }
 
 /* ------------------------------------------------------------------ *
@@ -433,7 +504,8 @@ function getPanell_(equip, dilluns, usuari) {
   var conf = configuracio_();
   var llindar = num_(conf.llindar_carrega) || 1.3;
   var diesEntreno = llista_(conf.dies_recordatori);
-  var regs = registres_();
+  // La setmana que es mira i les 3 anteriors (pel ratio), amb un marge.
+  var regs = registres_(sumaDies_(dilluns, -28));
   // Nomes les jugadores que aquest usuari pot veure. Un entrenador sense
   // equips a la seva fila no en veu cap.
   var permesos = equipsPermesos_(usuari);
@@ -582,14 +654,18 @@ function getJugadoraStaff_(id, nSetmanes, usuari) {
   // qualsevol jugadora del club posant-hi l'id a ma.
   var permesos = equipsPermesos_(usuari);
   if (permesos && permesos.indexOf(j.equip) === -1) {
-    return json_({ ok: false, error: 'Aquesta jugadora no es d'un equip teu.' });
+    return json_({ ok: false, error: "Aquesta jugadora no es d'un equip teu." });
   }
 
-  var regs = registres_().filter(function (r) { return r.id_jugadora === id; });
   var avui = avuiISO_();
   var p = avui.split('-');
   var d = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
   var dilluns = sumaDies_(avui, -((d.getUTCDay() + 6) % 7));
+
+  // Les setmanes que es demanen i 3 mes, que son les que necessita el ratio.
+  // L'historial de molesties queda acotat a aquesta mateixa finestra.
+  var regs = registres_(sumaDies_(dilluns, -7 * (n + 3)))
+    .filter(function (r) { return r.id_jugadora === id; });
 
   var setmanes = [];
   for (var k = n - 1; k >= 0; k--) {
