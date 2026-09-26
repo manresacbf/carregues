@@ -671,7 +671,9 @@ function registres_(desDe) {
         zona_molestia: text_(f.zona_molestia),
         dolor: num_(f.dolor),
         limita: esSi_(f.limita),
+        valoracio: num_(f.valoracio),
         duresa: num_(f.duresa),
+        tipus_sessio: text_(f.tipus_sessio),
         minuts: num_(f.minuts),
         carrega: num_(f.carrega) || 0,
         comentari: text_(f.comentari),
@@ -948,10 +950,14 @@ function getPanell_(equip, dilluns, usuari) {
   var filesJug = jugs.map(function (j) {
     var meus = regs.filter(function (r) { return r.id_jugadora === j.id; });
     var perDia = {};
-    dies.forEach(function (d) { perDia[d] = { abans: null, despres: null }; });
+    dies.forEach(function (d) { perDia[d] = { abans: null, despres: null, partit: null }; });
 
+    // Cada moment al seu lloc: abans, despres i partit. Barrejar-los feia que
+    // el registre del partit trepitges el d'abans d'aquell mateix dia.
     meus.forEach(function (r) {
-      if (perDia[r.data]) perDia[r.data][r.moment === 'despres' ? 'despres' : 'abans'] = r;
+      if (!perDia[r.data]) return;
+      if (r.moment === 'despres' || r.moment === 'partit') perDia[r.data][r.moment] = r;
+      else perDia[r.data].abans = r;
     });
 
     // Compliment
@@ -1009,22 +1015,33 @@ function getPanell_(equip, dilluns, usuari) {
     }
 
     var cel = dies.map(function (d) {
-      var a = perDia[d].abans, p = perDia[d].despres;
+      var a = perDia[d].abans, p = perDia[d].despres, pt = perDia[d].partit;
+
+      // La carrega del dia es tot el que ha fet: entrenament i partit.
+      var carrega = null;
+      if (p || pt) carrega = (p ? (Number(p.carrega) || 0) : 0) + (pt ? (Number(pt.carrega) || 0) : 0);
+
+      // La molestia pot venir del formulari d'abans o del de partit.
+      var mol = (a && a.te_molestia) ? a : ((pt && pt.te_molestia) ? pt : null);
+
       return {
         data: d,
-        carrega: p ? (Number(p.carrega) || 0) : null,
-        duresa: p ? p.duresa : null,
-        minuts: p ? p.minuts : null,
+        carrega: carrega,
+        duresa: p ? p.duresa : (pt ? pt.duresa : null),
+        minuts: p ? p.minuts : (pt ? pt.minuts : null),
+        tipus_sessio: p ? p.tipus_sessio : '',
         fatiga: a ? a.fatiga : null,
         son: a ? a.son : null,
-        molestia: !!(a && a.te_molestia),
+        molestia: !!mol,
         // La zona i el dolor viatgen amb la cel·la perque el panell pugui
         // dir on fa mal sense haver d'obrir la fitxa de cada jugadora.
-        zona: (a && a.te_molestia) ? a.zona_molestia : '',
-        dolor: (a && a.te_molestia) ? a.dolor : null,
-        limita: !!(a && a.limita),
+        zona: mol ? mol.zona_molestia : '',
+        dolor: mol ? mol.dolor : null,
+        limita: !!((a && a.limita) || (pt && pt.limita)),
         te_abans: !!a,
-        te_despres: !!p
+        te_despres: !!p,
+        te_partit: !!pt,
+        carrega_partit: pt ? (Number(pt.carrega) || 0) : null
       };
     });
 

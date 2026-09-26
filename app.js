@@ -1121,7 +1121,8 @@ function pintaPanell() {
       '<tbody>' + (files || '<tr><td class="nom">Cap jugadora</td></tr>') + '</tbody></table></div>' +
       '<p class="detall-cel" id="detall-cel">Toca una cel·la per veure què hi ha darrere.</p>' +
       '<p class="meta" style="margin-top:10px">' +
-        'Com més fosca la cel·la, més càrrega va fer aquell dia comparat amb el dia més fort de la setmana. ' +
+        'Les cel·les es comparen entre elles: la més fosca de tota la graella és la sessió més ' +
+        'dura que ha fet qualsevol jugadora aquesta setmana, i la resta es pinten en proporció. ' +
         'Punt taronja: molèstia. Vora vermella: la limita. «·»: va contestar abans però no després. ' +
         '«–»: no va contestar.' +
       '</p>' +
@@ -1160,7 +1161,8 @@ function pintaPanell() {
     const trossos = [esc(j.nom) + ' · ' + esc(diaCurt(d.data)) + ' ' + esc(formatDia(d.data))];
     if (d.carrega !== null && d.carrega !== undefined) {
       trossos.push('càrrega <b>' + Math.round(d.carrega) + '</b>' +
-        (d.duresa ? ' (duresa ' + d.duresa + ' × ' + d.minuts + ' min)' : ''));
+        (d.tipus_sessio ? ' · ' + esc(d.tipus_sessio) : '') +
+        (d.te_partit ? ' · partit ' + Math.round(d.carrega_partit || 0) : ''));
     } else if (d.te_abans) {
       trossos.push('va contestar abans, però no després');
     } else {
@@ -1227,6 +1229,14 @@ function equipTriatALaPantalla() {
 
 let partitStaff = null;     // el que ha tornat getPartit
 
+/** Les jugadores que ja tenim del panell: no cal demanar-les al full. */
+function jugadoresDelEquip(equip) {
+  if (!panell || !panell.jugadores) return [];
+  return panell.jugadores
+    .filter((j) => !equip || j.equip === equip)
+    .map((j) => ({ id: j.id, nom: j.nom, dorsal: j.dorsal }));
+}
+
 function pintaPartitStaff() {
   if (!esStaff()) { ves('#/inici'); return; }
   $('#titol').textContent = 'Dia de partit';
@@ -1237,41 +1247,36 @@ function pintaPartitStaff() {
     return;
   }
   const equip = equipPanell && equips.indexOf(equipPanell) !== -1 ? equipPanell : equips[0];
-  const data = (partitStaff && partitStaff.data) || avuiISO();
+  const data = avuiISO();
 
   $('#contingut').innerHTML =
     blocDataIEquip(equips, equip, data) +
-    '<div id="cos-partit"><p class="buit">Carregant les jugadores…</p></div>';
+    '<div id="cos-partit"></div>';
 
   $$('#equip-sessio .chip').forEach((b) => b.addEventListener('click', () => {
     $$('#equip-sessio .chip').forEach((x) => x.setAttribute('aria-pressed', 'false'));
     b.setAttribute('aria-pressed', 'true');
+    partitStaff = null;
+    pintaCosPartit();
     carregaPartit();
   }));
-  $('#data-sessio').addEventListener('change', carregaPartit);
+  $('#data-sessio').addEventListener('change', () => {
+    partitStaff = null;
+    pintaCosPartit();
+    carregaPartit();
+  });
+
+  // Les jugadores surten ja; el que hi hagi desat arriba després.
+  pintaCosPartit();
   carregaPartit();
 }
 
-async function carregaPartit() {
-  const data = $('#data-sessio').value || avuiISO();
-  const equip = equipTriatALaPantalla();
-  const cos = $('#cos-partit');
-  cos.innerHTML = '<p class="buit">Carregant les jugadores…</p>';
-  try {
-    const res = await api('getPartit', { data: data, equip: equip }, 3);
-    if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
-    partitStaff = res.data;
-    pintaCosPartit();
-  } catch (e) {
-    cos.innerHTML = '<p class="buit">No s&#39;ha pogut carregar: ' +
-      esc(String(e && e.message ? e.message : e)) + '</p>';
-  }
-}
-
 function pintaCosPartit() {
-  const d = partitStaff;
-  const trams = d.llista_trams || [];
-  const sessioPrevia = d.sessio || {};
+  const equip = equipTriatALaPantalla();
+  const trams = sessio.trams || [];
+  const jugs = (partitStaff && partitStaff.jugadores) || jugadoresDelEquip(equip);
+  const desat = (partitStaff && partitStaff.trams) || {};
+  const sessioPrevia = (partitStaff && partitStaff.sessio) || {};
 
   $('#cos-partit').innerHTML =
     '<div class="card">' +
@@ -1279,18 +1284,20 @@ function pintaCosPartit() {
     '</div>' +
     '<div class="card">' +
       '<div class="eyebrow">Minuts jugats</div>' +
-      (d.jugadores.length
-        ? d.jugadores.map((j) =>
+      (jugs.length
+        ? jugs.map((j) =>
             '<div class="fila-minuts">' +
               '<span class="qui">' + (j.dorsal ? '<b>' + esc(j.dorsal) + '</b> ' : '') + esc(j.nom) + '</span>' +
               '<select data-minuts="' + esc(j.id) + '">' +
                 '<option value="">—</option>' +
                 trams.map((t) => '<option value="' + esc(t.tram) + '"' +
-                  (d.trams[j.id] === t.tram ? ' selected' : '') + '>' + esc(t.tram) + ' min</option>').join('') +
+                  (desat[j.id] === t.tram ? ' selected' : '') + '>' + esc(t.tram) + ' min</option>').join('') +
               '</select>' +
             '</div>').join('')
         : '<p class="meta" style="margin:0">Cap jugadora en aquest equip.</p>') +
-      '<p class="meta" style="margin-top:10px">Deixa el guionet a qui no hagi jugat.</p>' +
+      '<p class="meta" style="margin-top:10px">Deixa el guionet a qui no hagi jugat.' +
+        (partitStaff ? '' : ' <span style="color:var(--avis)">Comprovant si aquest dia ja tenia res desat…</span>') +
+      '</p>' +
     '</div>' +
     blocComentari('Com ha anat el partit? (opcional)') +
     '<button class="btn" id="desa-partit">Desar el partit</button>';
@@ -1303,6 +1310,55 @@ function pintaCosPartit() {
   if (sessioPrevia.comentari) $('#comentari').value = sessioPrevia.comentari;
 
   $('#desa-partit').addEventListener('click', desaPartitStaff);
+}
+
+/**
+ * Omple el que ja estigui desat al full SENSE trepitjar el que l'entrenador
+ * hagi començat a triar mentre arribava: només toca el que encara és buit.
+ */
+function aplicaPartitDesat() {
+  if (!partitStaff) return;
+  const desat = partitStaff.trams || {};
+  $$('#cos-partit [data-minuts]').forEach((sel) => {
+    const tram = desat[sel.getAttribute('data-minuts')];
+    if (tram && !sel.value) sel.value = tram;
+  });
+
+  const s = partitStaff.sessio || {};
+  if (s.valoracio && !$('[data-escala="valoracio-partit"] button[aria-pressed="true"]')) {
+    const b = $('[data-escala="valoracio-partit"] button[data-valor="' + s.valoracio + '"]');
+    if (b) b.setAttribute('aria-pressed', 'true');
+  }
+  if (s.comentari && !$('#comentari').value) $('#comentari').value = s.comentari;
+
+  // Si el full porta alguna jugadora que el panell no tenia, la pintem.
+  const alaPantalla = $$('#cos-partit [data-minuts]').map((x) => x.getAttribute('data-minuts'));
+  const falten = (partitStaff.jugadores || []).filter((j) => alaPantalla.indexOf(j.id) === -1);
+  if (falten.length) pintaCosPartit();
+
+  const avis = $('#cos-partit .meta span');
+  if (avis) avis.remove();
+}
+
+async function carregaPartit() {
+  const data = $('#data-sessio').value || avuiISO();
+  const equip = equipTriatALaPantalla();
+  try {
+    const res = await api('getPartit', { data: data, equip: equip }, 3);
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
+    if (rutaActual().vista !== 'partit-staff') return;   // ja no hi som
+    partitStaff = res.data;
+    aplicaPartitDesat();
+    // Una segona passada per si la resposta i un repintat s'han creuat.
+    // Nomes omple el que encara es buit, aixi que repetir-ho no fa cap mal.
+    setTimeout(aplicaPartitDesat, 300);
+  } catch (e) {
+    const avis = $('#cos-partit .meta span');
+    if (avis) {
+      avis.textContent = 'No s\'ha pogut mirar si ja hi havia res desat.';
+      avis.style.color = 'var(--pink)';
+    }
+  }
 }
 
 async function desaPartitStaff() {
