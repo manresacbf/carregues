@@ -231,6 +231,17 @@ function encua(reg) {
   sincronitza();
 }
 
+/** Quant fa, en paraules. Amb minuts sols, una còpia de dilluns llegida el
+    dimecres deia "fa 2.880 min". */
+function faQuant(ts) {
+  const minuts = Math.max(1, Math.round((Date.now() - ts) / 60000));
+  if (minuts < 60) return 'fa ' + minuts + ' min';
+  const hores = Math.round(minuts / 60);
+  if (hores < 24) return 'fa ' + hores + (hores === 1 ? ' hora' : ' hores');
+  const dies = Math.round(hores / 24);
+  return 'fa ' + dies + (dies === 1 ? ' dia' : ' dies');
+}
+
 function pintaSync() {
   const p = $('#estat-sync'), t = $('#estat-sync-text');
   if (!p) return;
@@ -975,7 +986,7 @@ function pintaPanell() {
   const copia = llegeix(CLAUS.panell, null);
   const avisCopia = panellDeCache
     ? '<p class="meta" style="margin:-2px 0 10px; text-align:center; color:var(--avis)">' +
-      'Dades de fa ' + (copia && copia.ts ? Math.max(1, Math.round((Date.now() - copia.ts) / 60000)) + ' min' : 'abans') +
+      'Dades ' + (copia && copia.ts ? faQuant(copia.ts) : 'd&#39;abans') +
       ' · actualitzant…</p>'
     : '';
   const quiSoc = u.nom
