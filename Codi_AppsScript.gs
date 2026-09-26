@@ -242,12 +242,16 @@ function avuiISO_() {
  *  Configuracio i PIN                                                 *
  * ------------------------------------------------------------------ */
 
+var _confCache = null;   // una sola lectura de Config per execucio
+
 function configuracio_() {
+  if (_confCache) return _confCache;
   var c = {};
   files_('config').forEach(function (f) {
     var k = text_(f.clau);
     if (k) c[k] = text_(f.valor);
   });
+  _confCache = c;
   return c;
 }
 
@@ -519,6 +523,59 @@ function carregaEntre_(regs, idJ, desDe, finsA) {
 }
 
 /**
+ * Carrega de cada jugadora i cada setmana, en UNA sola passada pels
+ * registres. Abans, el panell demanava el ratio jugadora per jugadora i
+ * cada ratio recorria la llista sencera quatre vegades: amb 57 jugadores
+ * son 228 passades per pintar una setmana.
+ *
+ * Retorna { idJugadora: { dillunsISO: carrega } }.
+ */
+function carreguesPerSetmana_(regs) {
+  var index = {};
+  regs.forEach(function (r) {
+    if (r.moment !== 'despres') return;
+    var dl = dillunsDe_(r.data);
+    if (!dl) return;
+    var meu = index[r.id_jugadora] || (index[r.id_jugadora] = {});
+    meu[dl] = (meu[dl] || 0) + (Number(r.carrega) || 0);
+  });
+  return index;
+}
+
+/** Dilluns de la setmana d'una data ISO, sempre en UTC. */
+function dillunsDe_(iso) {
+  if (!/^\d{4}-\d{2}-\d{2}/.test(iso)) return '';
+  var p = iso.split('-');
+  var d = new Date(Date.UTC(Number(p[0]), Number(p[1]) - 1, Number(p[2])));
+  return sumaDies_(iso, -((d.getUTCDay() + 6) % 7));
+}
+
+/**
+ * El mateix que ratioDe_, pero llegint de l'index. Una setmana que no hi
+ * consta es una setmana sense cap sessio registrada: no compta com a
+ * referencia, igual que abans.
+ */
+function ratioAmbIndex_(index, idJ, dilluns) {
+  var meu = index[idJ] || {};
+  var setmana = meu[dilluns] || 0;
+  var previes = [];
+  for (var k = 1; k <= 3; k++) {
+    var ini = sumaDies_(dilluns, -7 * k);
+    if (meu[ini] !== undefined) previes.push(meu[ini]);
+  }
+  if (previes.length < 3) {
+    return { carrega_setmana: setmana, mitjana_previa: null, ratio: null, motiu: 'dades insuficients' };
+  }
+  var mitjana = (previes[0] + previes[1] + previes[2]) / 3;
+  return {
+    carrega_setmana: setmana,
+    mitjana_previa: Math.round(mitjana),
+    ratio: mitjana > 0 ? Math.round((setmana / mitjana) * 100) / 100 : null,
+    motiu: mitjana > 0 ? '' : 'sense carrega previa'
+  };
+}
+
+/**
  * ratio = carrega d'aquesta setmana / mitjana de les 3 anteriors.
  * Amb menys de 3 setmanes previes amb dades no es calcula: una sola
  * setmana no es una referencia.
@@ -553,6 +610,7 @@ function getPanell_(equip, dilluns, usuari) {
   var diesEntreno = llista_(conf.dies_recordatori);
   // La setmana que es mira i les 3 anteriors (pel ratio), amb un marge.
   var regs = registres_(sumaDies_(dilluns, -28));
+  var indexCarregues = carreguesPerSetmana_(regs);
   // Nomes les jugadores que aquest usuari pot veure. Un entrenador sense
   // equips a la seva fila no en veu cap.
   var permesos = equipsPermesos_(usuari);
@@ -625,7 +683,7 @@ function getPanell_(equip, dilluns, usuari) {
       }
     }
 
-    var c = ratioDe_(regs, j.id, dilluns);
+    var c = ratioAmbIndex_(indexCarregues, j.id, dilluns);
     if (c.ratio !== null && c.ratio > llindar) {
       alertes.push({
         nivell: 'taronja',

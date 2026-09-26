@@ -52,7 +52,8 @@ const CLAUS = {
   roster: 'carregues.roster',
   meus: 'carregues.meus',
   pendents: 'carregues.pendents',
-  staff: 'carregues.staff'
+  staff: 'carregues.staff',
+  panell: 'carregues.panell'
 };
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -428,7 +429,7 @@ function pintaInici() {
     location.hash = '';
     pintaQui();
   });
-  $('#ves-staff').addEventListener('click', () => ves('#/staff'));
+  $('#ves-staff').addEventListener('click', () => ves(staff.pin ? '#/panell' : '#/staff'));
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -745,6 +746,8 @@ function pintaStaffPin() {
     '<button class="btn secundari" id="torna">Torno a l\'app de jugadora</button>';
 
   $('#torna').addEventListener('click', () => ves(jo ? '#/inici' : ''));
+  // Si el mobil ja el sap, nomes cal prémer Entrar.
+  if (staff.pin) $('#pin').value = staff.pin;
   $('#entra').addEventListener('click', async () => {
     const pin = $('#pin').value.trim();
     if (!pin) return;
@@ -771,12 +774,17 @@ function pintaStaffPin() {
 
 let panell = null;
 let setmanaPanell = '';
+let panellDeCache = false;
 
 async function demanaPanell(dilluns) {
   const res = await api('getPanell', { pin_staff: staff.pin, equip: equipTriat, setmana: dilluns }, 3);
   if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
   panell = res.data;
   setmanaPanell = dilluns;
+  panellDeCache = false;
+  // Copia per poder ensenyar alguna cosa a l'instant la propera vegada:
+  // el full triga entre 10 i 17 segons a contestar aquesta crida.
+  guarda(CLAUS.panell, { setmana: dilluns, ts: Date.now(), data: panell });
   return panell;
 }
 
@@ -851,10 +859,32 @@ function pintaPanell() {
   $('#titol').textContent = 'Panell';
 
   if (!panell) {
-    $('#contingut').innerHTML = '<p class="buit">Carregant…</p>';
-    demanaPanell(setmanaPanell || dillunsDe(avuiISO()))
+    const quina = setmanaPanell || dillunsDe(avuiISO());
+    const copia = llegeix(CLAUS.panell, null);
+
+    if (copia && copia.setmana === quina && copia.data) {
+      // Ensenyem l'última còpia mentre arriba la bona: el full triga entre
+      // 10 i 17 segons i mirar una pantalla buida tanta estona fa pensar
+      // que l'app no funciona.
+      panell = copia.data;
+      setmanaPanell = quina;
+      panellDeCache = true;
+      pintaPanell();
+      demanaPanell(quina).then(() => pintaPanell()).catch(() => { panellDeCache = true; });
+      return;
+    }
+
+    $('#contingut').innerHTML = '<p class="buit">Carregant…<br><span class="meta">El full sol trigar uns segons.</span></p>';
+    demanaPanell(quina)
       .then(() => pintaPanell())
       .catch((e) => {
+        if (String(e && e.message) === 'PIN') {
+          // El PIN ja no val: millor tornar a demanar-lo que deixar-lo encallat.
+          staff.pin = '';
+          localStorage.removeItem(CLAUS.staff);
+          ves('#/staff');
+          return;
+        }
         $('#contingut').innerHTML = '<p class="buit">No s&#39;ha pogut carregar: ' +
           esc(String(e && e.message ? e.message : e)) + '</p>';
       });
@@ -881,6 +911,12 @@ function pintaPanell() {
   // això només és per saber què estàs mirant.
   const u = panell.usuari || {};
   const seus = (u.equips || []).join(', ');
+  const copia = llegeix(CLAUS.panell, null);
+  const avisCopia = panellDeCache
+    ? '<p class="meta" style="margin:-2px 0 10px; text-align:center; color:var(--avis)">' +
+      'Dades de fa ' + (copia && copia.ts ? Math.max(1, Math.round((Date.now() - copia.ts) / 60000)) + ' min' : 'abans') +
+      ' · actualitzant…</p>'
+    : '';
   const quiSoc = u.nom
     ? '<p class="meta" style="margin:-2px 0 10px; text-align:center">' + esc(u.nom) + ' · ' +
       (u.rol === 'director'
@@ -991,7 +1027,7 @@ function pintaPanell() {
       '<span class="meta" style="flex:1; text-align:center">Setmana del ' + esc(formatDia(panell.setmana)) + '</span>' +
       '<button type="button" class="chip" id="setm-seg">→</button>' +
     '</div>' +
-    quiSoc +
+    quiSoc + avisCopia +
     filtres +
 
     '<div class="card"><div class="eyebrow">Alertes actives</div>' + blocAlertes + '</div>' +
@@ -1093,6 +1129,7 @@ function pintaPanell() {
     panell = null;
     equipPanell = '';
     localStorage.removeItem(CLAUS.staff);
+    localStorage.removeItem(CLAUS.panell);   // son dades de salut: no es queden al mobil
     ves(jo ? '#/inici' : '');
     if (!jo) pintaQui();
   });
@@ -1164,7 +1201,7 @@ async function arrenca() {
     else ves('#/inici');
   });
   $('#estat-sync').addEventListener('click', () => sincronitza(true));
-  $('#qui-staff').addEventListener('click', () => { obreApp('#/staff'); });
+  $('#qui-staff').addEventListener('click', () => { obreApp(staff.pin ? '#/panell' : '#/staff'); });
   window.addEventListener('hashchange', ruta);
   window.addEventListener('online', () => sincronitza());
   document.addEventListener('visibilitychange', () => {
