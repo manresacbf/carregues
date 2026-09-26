@@ -158,9 +158,9 @@ pista — i al seu panell els dos botons d'a dalt no hi surten.
 ## El resum de partits
 
 Una graella de **jugadores × últims partits** on cada cel·la són els minuts
-d'aquell partit, més fosca com més minuts, i a sota una llista de minuts
-totals ordenada de més a menys. Serveix per veure d'una ullada com es
-reparteixen els minuts i qui es va quedant fora.
+d'aquell partit, i a sota una llista de minuts totals ordenada de més a
+menys. Serveix per veure d'una ullada com es reparteixen els minuts i qui
+es va quedant fora.
 
 Hi entren tots dos: el director la veu de tots els equips i l'entrenador/a
 només dels seus, amb el mateix filtratge de servidor que el panell.

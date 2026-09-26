@@ -1144,8 +1144,9 @@ function pintaPanell() {
       '<tbody>' + (files || '<tr><td class="nom">Cap jugadora</td></tr>') + '</tbody></table></div>' +
       '<p class="detall-cel" id="detall-cel">Toca una cel·la per veure què hi ha darrere.</p>' +
       '<p class="meta" style="margin-top:10px">' +
-        'Les cel·les es comparen entre elles: la més fosca de tota la graella és la sessió més ' +
-        'dura que ha fet qualsevol jugadora aquesta setmana, i la resta es pinten en proporció. ' +
+        'Com més magenta, més càrrega. Les cel·les es comparen entre elles: la més encesa de ' +
+        'tota la graella és la sessió més dura que ha fet qualsevol jugadora aquesta setmana, ' +
+        'i la resta es pinten en proporció. ' +
         'Punt taronja: molèstia. Vora vermella: la limita. «·»: va contestar abans però no després. ' +
         '«–»: no va contestar.' +
       '</p>' +
@@ -1578,7 +1579,7 @@ function pintaResumPartits() {
         caps + '</tr></thead><tbody>' + files + '</tbody></table></div>' +
       '<p class="meta" style="margin-top:10px">' +
         'Cada cel·la són els minuts d&#39;aquell partit (el punt mitjà del tram que va ' +
-        'posar l&#39;entrenador/a) i com més fosca, més minuts. «–» vol dir que no va jugar. ' +
+        'posar l&#39;entrenador/a). «–» vol dir que no va jugar. ' +
         'La cara de sobre la data és com va dir el cos tècnic que havia anat el partit.' +
       '</p>' +
       '<div class="eyebrow" style="margin-top:16px">Minuts totals</div>' +
