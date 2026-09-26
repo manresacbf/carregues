@@ -145,12 +145,38 @@ No és només documentació: està al codi.
   `Config` → `tipus_sessio`— i com de dur ha estat, amb cinc cares.
 - **Dia de partit**: com ha anat, com de dur, molèstia i un comentari.
 
-**L'entrenador**, des del panell:
+**L'entrenador/a**, des del panell:
 
 - **Dia de partit**: els minuts de cada jugadora per trams i com ha anat el
   partit.
 - **Dia d'entrenament**: com ha anat, si s'ha complert l'objectiu i un
   comentari.
+
+**El director tècnic** no entra dades de cap equip — les entra qui és a la
+pista — i al seu panell els dos botons d'a dalt no hi surten.
+
+## El resum de partits
+
+Una graella de **jugadores × últims partits** on cada cel·la són els minuts
+d'aquell partit, més fosca com més minuts, i a sota una llista de minuts
+totals ordenada de més a menys. Serveix per veure d'una ullada com es
+reparteixen els minuts i qui es va quedant fora.
+
+Hi entren tots dos: el director la veu de tots els equips i l'entrenador/a
+només dels seus, amb el mateix filtratge de servidor que el panell.
+
+**No hi ha ni rival ni resultat, i és a posta.** Això va de repartiment de
+minuts, no de classificació. Si algú ho demana, calen dues columnes noves a
+`Sessions` i dos camps a la pantalla de partit: decisió abans que codi.
+
+Els minuts són el **punt mitjà del tram** que va posar l'entrenador/a (el tram
+`21-25` compta 23), que és el mateix número amb què es calcula la càrrega del
+partit.
+
+A diferència del panell, aquesta pantalla llegeix només `Sessions` i `Minuts`.
+Són pestanyes petites — una fila per partit i una per jugadora i partit,
+davant de les tres per jugadora i dia de `Registres` — i per això pot obrir
+tot el club de cop sense la lentitud del panell.
 
 Les cares de duresa es guarden **en escala 0–10** (2, 4, 6, 8, 10) encara que
 la jugadora en vegi cinc: la càrrega és `duresa × minuts` i canviar l'escala

@@ -1223,6 +1223,8 @@ function doPost(e) {
       case 'getPanell':   return getPanell_(body.equip, dataISO_(body.setmana), usuari);
       case 'getJugadora': return getJugadoraStaff_(body.id, body.n_setmanes, usuari);
       case 'getPartit':   return getPartit_(dataISO_(body.data), text_(body.equip), usuari);
+      case 'getResumPartits':
+        return getResumPartits_(text_(body.equip), body.n, usuari);
       default:            return json_({ ok: false, error: 'Accio desconeguda: ' + action });
     }
   } catch (err) {
@@ -1242,6 +1244,111 @@ function sync_(operacions, codi) {
     return { opId: text_(op.opId), ok: !!r.ok, error: r.ok ? '' : (r.error || 'Error') };
   });
   return json_({ ok: true, data: { resultats: resultats } });
+}
+
+/**
+ * El resum de partits: qui juga i quants minuts, partit a partit.
+ *
+ * No hi ha ni rival ni resultat a posta. Aixo va de repartiment de minuts i
+ * de com ha anat el partit per dins, no de classificacio.
+ *
+ * Llegeix nomes 'Sessions' i 'Minuts'. Son pestanyes petites (una fila per
+ * partit, una per jugadora i partit) comparades amb 'Registres', i per aixo
+ * aquesta pantalla pot abastar tot el club sense la lentitud del panell.
+ */
+function getResumPartits_(equip, n, usuari) {
+  var quants = Math.min(Math.max(num_(n) || 8, 1), 20);
+  var permesos = equipsPermesos_(usuari);
+  if (equip && permesos && permesos.indexOf(equip) === -1) {
+    return json_({ ok: false, error: "Aquest equip no es teu." });
+  }
+  var potVeure = function (e) {
+    if (!e) return false;
+    if (equip) return e === equip;
+    return !permesos || permesos.indexOf(e) !== -1;
+  };
+
+  /* Un partit es una data i un equip. Pot venir de 'Sessions' (l'entrenador
+     ha dit com ha anat) o nomes de 'Minuts' (nomes n'ha posat els minuts). */
+  var perEquip = {};
+  var apunta = function (e, data) {
+    if (!potVeure(e) || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return null;
+    if (!perEquip[e]) perEquip[e] = { partits: {}, minuts: {}, noms: {} };
+    if (!perEquip[e].partits[data]) {
+      perEquip[e].partits[data] = { data: data, valoracio: null, comentari: '' };
+    }
+    return perEquip[e].partits[data];
+  };
+
+  try {
+    files_('sessions').forEach(function (s) {
+      if (text_(s.tipus) !== 'partit') return;
+      var p = apunta(text_(s.equip), dataISO_(s.data));
+      if (!p) return;
+      p.valoracio = num_(s.valoracio);
+      p.comentari = text_(s.comentari);
+    });
+  } catch (err) { /* encara sense pestanya */ }
+
+  var filesMinuts = [];
+  try { filesMinuts = files_('minuts'); } catch (err) { filesMinuts = []; }
+  filesMinuts.forEach(function (m) {
+    var e = text_(m.equip), data = dataISO_(m.data), idJ = text_(m.id_jugadora);
+    if (!apunta(e, data) || !idJ) return;
+    perEquip[e].minuts[data + '|' + idJ] = {
+      tram: text_(m.tram),
+      minuts: num_(m.minuts) || (text_(m.tram) ? minutsDelTram_(text_(m.tram)) : 0)
+    };
+    if (text_(m.nom_jugadora)) perEquip[e].noms[idJ] = text_(m.nom_jugadora);
+  });
+
+  var equips = Object.keys(perEquip).sort();
+  var resultat = equips.map(function (e) {
+    var dades = perEquip[e];
+
+    /* Els ultims N, i despres en ordre cronologic: la graella es llegeix
+       d'esquerra a dreta com el calendari. */
+    var partits = Object.keys(dades.partits).sort().slice(-quants)
+      .map(function (d) { return dades.partits[d]; });
+
+    /* Les actives de la plantilla, mes qualsevol que hagi jugat i ja no hi
+       sigui: si ha jugat minuts, ha de sortir al resum d'aquells partits. */
+    var jugs = jugadores_(e, true).map(function (j) {
+      return { id: j.id, nom: j.nom, dorsal: j.dorsal };
+    });
+    var teJa = {};
+    jugs.forEach(function (j) { teJa[j.id] = true; });
+    partits.forEach(function (p) {
+      Object.keys(dades.noms).forEach(function (idJ) {
+        if (teJa[idJ] || !dades.minuts[p.data + '|' + idJ]) return;
+        teJa[idJ] = true;
+        jugs.push({ id: idJ, nom: dades.noms[idJ], dorsal: '' });
+      });
+    });
+
+    var maxim = 0;
+    var files = jugs.map(function (j) {
+      var total = 0, jugats = 0;
+      var cel = partits.map(function (p) {
+        var m = dades.minuts[p.data + '|' + j.id];
+        if (!m || !m.minuts) return null;
+        total += m.minuts;
+        jugats++;
+        if (m.minuts > maxim) maxim = m.minuts;
+        return { tram: m.tram, minuts: m.minuts };
+      });
+      return { id: j.id, nom: j.nom, dorsal: j.dorsal, minuts: cel,
+               total: total, jugats: jugats };
+    });
+
+    /* De mes a menys minuts: el que es vol veure d'un cop d'ull es qui es
+       queda a baix de tot, no l'ordre dels dorsals. */
+    files.sort(function (a, b) { return b.total - a.total || a.nom.localeCompare(b.nom); });
+
+    return { equip: e, partits: partits, jugadores: files, maxim: maxim };
+  });
+
+  return json_({ ok: true, data: { equips: resultat, n: quants } });
 }
 
 /**

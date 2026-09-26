@@ -307,6 +307,7 @@ async function sincronitza(manual) {
 function esStaff() {
   return sessio.tipus === 'entrenador' || sessio.tipus === 'director';
 }
+function esDirector() { return sessio.tipus === 'director'; }
 
 function guardaSessio() { guarda(CLAUS.sessio, sessio); }
 
@@ -375,6 +376,8 @@ function surtDeTot() {
   meus = [];
   panell = null;
   equipPanell = '';
+  resum = null;
+  equipResum = '';
   guardaMeus();
   localStorage.removeItem(CLAUS.sessio);
   localStorage.removeItem(CLAUS.panell);
@@ -401,7 +404,7 @@ function obreApp(hash) {
   ruta();
 }
 
-const VISTES_STAFF = ['panell', 'fitxa', 'partit-staff', 'entreno-staff'];
+const VISTES_STAFF = ['panell', 'fitxa', 'partit-staff', 'entreno-staff', 'resum-partits'];
 
 function ruta() {
   if (!sessio.codi) { pintaEntrada(); return; }
@@ -426,6 +429,7 @@ function ruta() {
   else if (r.vista === 'fitxa') pintaFitxa(r.id);
   else if (r.vista === 'partit-staff') pintaPartitStaff();
   else if (r.vista === 'entreno-staff') pintaEntrenoStaff();
+  else if (r.vista === 'resum-partits') pintaResumPartits();
   else pintaInici();
 
   window.scrollTo(0, 0);
@@ -1124,9 +1128,13 @@ function pintaPanell() {
             : '<p class="meta" style="margin:8px 0 0">Cap jugadora en aquesta vista.</p>')) +
     '</div>' +
 
+    // El director no entra dades de cap equip: les entra qui hi és a la pista.
     '<div class="accions-staff">' +
-      '<button type="button" class="btn secundari" id="ves-partit">🏀 Dia de partit</button>' +
-      '<button type="button" class="btn secundari" id="ves-entreno">🏋️ Dia d&#39;entrenament</button>' +
+      (esDirector()
+        ? ''
+        : '<button type="button" class="btn secundari" id="ves-partit">🏀 Dia de partit</button>' +
+          '<button type="button" class="btn secundari" id="ves-entreno">🏋️ Dia d&#39;entrenament</button>') +
+      '<button type="button" class="btn secundari" id="ves-resum">📊 Resum de partits</button>' +
     '</div>' +
 
     '<div class="card">' +
@@ -1160,8 +1168,9 @@ function pintaPanell() {
     });
   });
 
-  $('#ves-partit').addEventListener('click', () => ves('#/partit-staff'));
-  $('#ves-entreno').addEventListener('click', () => ves('#/entreno-staff'));
+  if ($('#ves-partit')) $('#ves-partit').addEventListener('click', () => ves('#/partit-staff'));
+  if ($('#ves-entreno')) $('#ves-entreno').addEventListener('click', () => ves('#/entreno-staff'));
+  $('#ves-resum').addEventListener('click', () => { resum = null; ves('#/resum-partits'); });
 
   $$('#contingut [data-equip]').forEach((b) => b.addEventListener('click', () => {
     equipPanell = b.getAttribute('data-equip');
@@ -1470,6 +1479,135 @@ function pintaEntrenoStaff() {
       boto.textContent = 'Desar l\'entrenament';
     }
   });
+}
+
+
+/* ──────────────────────────────────────────────────────────────────
+   14. RESUM DE PARTITS
+   ────────────────────────────────────────────────────────────────── *
+   Qui juga i quants minuts, partit a partit. Sense rival ni resultat a
+   posta: això va de repartiment de minuts, no de classificació.          */
+
+let resum = null;
+let equipResum = '';
+
+function colorMinuts(m, max) {
+  const p = max > 0 ? m / max : 0;
+  return "background:rgba(255,45,120," + (0.16 + p * 0.64).toFixed(2) + ");";
+}
+
+function caraDe(v) {
+  const c = ESC_COM_HA_ANAT.filter((x) => x.v === Number(v))[0];
+  return c ? c.e : '';
+}
+
+function pintaResumPartits() {
+  if (!esStaff()) { ves('#/inici'); return; }
+  $('#titol').textContent = 'Resum de partits';
+
+  if (!resum) {
+    $('#contingut').innerHTML = '<p class="buit">Carregant…<br>' +
+      '<span class="meta">El full sol trigar uns segons.</span></p>';
+    api('getResumPartits', { n: 8 }, 3)
+      .then((res) => {
+        if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
+        if (rutaActual().vista !== 'resum-partits') return;   // ja no hi som
+        resum = res.data;
+        pintaResumPartits();
+      })
+      .catch((e) => {
+        if (rutaActual().vista !== 'resum-partits') return;
+        if (String(e && e.message) === 'CODI') { surtDeTot(); return; }
+        $('#contingut').innerHTML = '<p class="buit">No s&#39;ha pogut carregar: ' +
+          esc(String(e && e.message ? e.message : e)) + '</p>';
+      });
+    return;
+  }
+
+  const tots = resum.equips || [];
+  if (equipResum && !tots.filter((e) => e.equip === equipResum).length) equipResum = '';
+  const visibles = equipResum ? tots.filter((e) => e.equip === equipResum) : tots;
+
+  const filtres = tots.length > 1
+    ? '<div class="filtres-equip">' +
+        '<button type="button" class="chip" data-eq="" aria-pressed="' + (!equipResum) + '">Tots</button>' +
+        tots.map((e) => '<button type="button" class="chip" data-eq="' + esc(e.equip) + '"' +
+          ' aria-pressed="' + (equipResum === e.equip) + '">' + esc(e.equip) + '</button>').join('') +
+      '</div>'
+    : '';
+
+  const blocs = visibles.map((eq) => {
+    if (!eq.partits.length) {
+      return '<div class="card"><div class="eyebrow">' + esc(eq.equip) + '</div>' +
+        '<p class="meta" style="margin:0">Cap partit registrat encara.</p></div>';
+    }
+
+    const maxTotal = Math.max.apply(null, eq.jugadores.map((j) => j.total).concat([1]));
+
+    const caps = eq.partits.map((p) =>
+      '<th>' + esc(diaCurt(p.data)) + '<br>' + esc(p.data.slice(8, 10) + '/' + p.data.slice(5, 7)) +
+        '<br><span class="cara">' + caraDe(p.valoracio) + '</span></th>').join('');
+
+    const files = eq.jugadores.map((j) =>
+      '<tr><td class="nom"><button type="button" class="chip" data-fitxa="' + esc(j.id) + '"' +
+          ' style="min-height:34px">' +
+          (j.dorsal ? '<b>' + esc(j.dorsal) + '</b> ' : '') + esc(j.nom) + '</button></td>' +
+        j.minuts.map((m, i) =>
+          '<td class="cel' + (m ? ' plena' : ' buida') + '"' +
+            ' style="' + (m ? colorMinuts(m.minuts, eq.maxim) : '') + '"' +
+            ' title="' + esc(eq.partits[i].data) + (m ? ' &middot; ' + esc(m.tram) + ' min' : '') + '">' +
+            (m ? esc(String(m.minuts)) : '–') + '</td>').join('') +
+        '</tr>').join('');
+
+    // El total fora de la taula: amb vuit partits la graella ja no hi cap a
+    // la pantalla, i és justament el total el que no s'ha d'anar a buscar.
+    const totals = eq.jugadores.map((j) =>
+      '<div class="fila-min">' +
+        '<span class="qui">' + (j.dorsal ? '<b>' + esc(j.dorsal) + '</b> ' : '') + esc(j.nom) + '</span>' +
+        '<span class="bar"><i style="width:' + Math.round((j.total / maxTotal) * 100) + '%"></i></span>' +
+        '<span class="tot">' + esc(String(j.total)) + '′ <span class="quants">' +
+          j.jugats + '/' + eq.partits.length + '</span></span>' +
+      '</div>').join('');
+
+    const comentaris = eq.partits.filter((p) => p.comentari);
+
+    return '<div class="card">' +
+      '<div class="eyebrow">' + esc(eq.equip) + ' &middot; ' +
+        (eq.partits.length === 1 ? 'últim partit' : 'últims ' + eq.partits.length + ' partits') + '</div>' +
+      '<div class="graella-embolcall"><table class="graella minuts"><thead><tr><th></th>' +
+        caps + '</tr></thead><tbody>' + files + '</tbody></table></div>' +
+      '<p class="meta" style="margin-top:10px">' +
+        'Cada cel·la són els minuts d&#39;aquell partit (el punt mitjà del tram que va ' +
+        'posar l&#39;entrenador/a) i com més fosca, més minuts. «–» vol dir que no va jugar. ' +
+        'La cara de sobre la data és com va dir el cos tècnic que havia anat el partit.' +
+      '</p>' +
+      '<div class="eyebrow" style="margin-top:16px">Minuts totals</div>' +
+      '<div class="barres-min">' + totals + '</div>' +
+      '<p class="meta" style="margin-top:10px">' +
+        'De més a menys minuts, i al costat en quants dels ' + eq.partits.length + ' partits ha jugat.' +
+      '</p>' +
+      (comentaris.length
+        ? '<div class="eyebrow" style="margin-top:16px">Què en va dir el cos tècnic</div>' +
+          comentaris.map((p) =>
+            '<div class="molestia"><span class="qui">' + esc(diaCurt(p.data)) + ' ' +
+              esc(formatDia(p.data)) + ' ' + caraDe(p.valoracio) + '</span>' +
+              '<span class="on">' + esc(p.comentari) + '</span></div>').join('')
+        : '') +
+    '</div>';
+  }).join('');
+
+  $('#contingut').innerHTML =
+    filtres +
+    (blocs || '<p class="buit">Encara no hi ha cap partit registrat.</p>') +
+    '<button class="btn secundari" id="torna-panell">Tornar al panell</button>';
+
+  $$('#contingut [data-eq]').forEach((b) => b.addEventListener('click', () => {
+    equipResum = b.getAttribute('data-eq');
+    pintaResumPartits();
+  }));
+  $$('#contingut [data-fitxa]').forEach((b) =>
+    b.addEventListener('click', () => ves('#/fitxa/' + b.getAttribute('data-fitxa'))));
+  $('#torna-panell').addEventListener('click', () => ves('#/panell'));
 }
 
 

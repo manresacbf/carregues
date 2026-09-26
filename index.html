@@ -240,6 +240,20 @@
   }
   table.graella td.variacio.alt{background:rgba(245,165,36,.18); border-color:var(--avis); color:var(--avis);}
   table.graella td.variacio.normal{color:var(--text);}
+  /* Al resum de partits la xifra SÍ que és la informació — són els minuts —
+     i no hi ha cap detall a sota on ensenyar-la en tocar-la. */
+  table.graella.minuts td.cel.plena{color:#fff; text-shadow:0 1px 2px rgba(0,0,0,.5);}
+  table.graella.minuts th .cara{font-size:15px; text-transform:none; letter-spacing:0;}
+  .barres-min{display:flex; flex-direction:column; gap:7px;}
+  .fila-min{display:flex; align-items:center; gap:9px; font-size:13.5px;}
+  .fila-min .qui{flex:0 0 42%; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .fila-min .bar{flex:1; height:9px; background:var(--bg-alt); border-radius:999px; overflow:hidden;}
+  .fila-min .bar i{display:block; height:100%; background:var(--pink); border-radius:999px;}
+  /* No es diu .xifra: aquesta classe ja es la dels quadres grossos del resum
+     de la jugadora i li enganxaria el fons i el marc. */
+  .fila-min .tot{flex:0 0 76px; text-align:right; font-weight:700; white-space:nowrap;
+    font-variant-numeric:tabular-nums;}
+  .fila-min .quants{font-weight:400; font-size:11px; color:var(--text-dim);}
   .detall-cel{
     margin:10px 0 0; padding:10px 12px; font-size:14px; min-height:42px;
     background:var(--bg); border:1px solid var(--line); border-radius:10px;
