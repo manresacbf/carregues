@@ -37,8 +37,10 @@ var FULLS = {
   jugadores: {
     nom: 'Jugadores',
     clau: 'id',
-    capcalera: ['id', 'nom', 'dorsal', 'equip', 'activa'],
-    text: ['id', 'dorsal']
+    // 'codi' es amb que entra la jugadora a l'app. Ha de ser unic a tot el
+    // club, tambe respecte dels codis de l'staff: vegeu entrar_().
+    capcalera: ['id', 'nom', 'dorsal', 'equip', 'activa', 'codi'],
+    text: ['id', 'dorsal', 'codi']
   },
   registres: {
     nom: 'Registres',
@@ -48,10 +50,15 @@ var FULLS = {
     // nom_jugadora es nomes per poder llegir el full amb ulls humans: qui mana
     // es id_jugadora. Si canvia un nom a Jugadores, les files velles conserven
     // el que hi havia el dia que es van escriure.
+    // moment: 'abans' | 'despres' | 'partit'.
+    // valoracio (1-5) es la cara de "com ha anat": nomes a despres i partit.
+    // duresa es guarda SEMPRE en escala 0-10, encara que la jugadora triï
+    // entre cinc cares, perque les setmanes velles i les noves es puguin
+    // comparar: la carrega es duresa x minuts i canviar l'escala la partiria.
     capcalera: ['id', 'id_jugadora', 'nom_jugadora', 'data', 'moment', 'son', 'fatiga', 'anim',
-                'te_molestia', 'zona_molestia', 'dolor', 'limita', 'duresa',
-                'minuts', 'carrega', 'comentari', 'timestamp'],
-    text: ['id', 'id_jugadora', 'data', 'moment', 'te_molestia', 'limita', 'timestamp']
+                'te_molestia', 'zona_molestia', 'dolor', 'limita', 'valoracio', 'duresa',
+                'tipus_sessio', 'minuts', 'carrega', 'comentari', 'timestamp'],
+    text: ['id', 'id_jugadora', 'data', 'moment', 'te_molestia', 'limita', 'tipus_sessio', 'timestamp']
   },
   usuaris: {
     nom: 'Usuaris',
@@ -62,6 +69,22 @@ var FULLS = {
     capcalera: ['pin', 'nom', 'rol', 'equips'],
     text: ['pin', 'equips']
   },
+  // Una fila per partit o entrenament, escrita per l'entrenador.
+  sessions: {
+    nom: 'Sessions',
+    clau: 'id',
+    capcalera: ['id', 'data', 'equip', 'tipus', 'responsable', 'valoracio',
+                'objectiu', 'comentari', 'timestamp'],
+    text: ['id', 'data', 'tipus', 'objectiu', 'timestamp']
+  },
+  // Una fila per jugadora i partit: els minuts que ha jugat.
+  minuts: {
+    nom: 'Minuts',
+    clau: 'id',
+    capcalera: ['id', 'data', 'equip', 'id_jugadora', 'nom_jugadora',
+                'minuts', 'tram', 'timestamp'],
+    text: ['id', 'data', 'id_jugadora', 'tram', 'timestamp']
+  },
   config: {
     nom: 'Config',
     clau: 'clau',
@@ -70,6 +93,27 @@ var FULLS = {
   }
 };
 
+/* Trams de minuts que tria l'entrenador. Es guarda el tram tal com el tria
+   i, per calcular la carrega, el punt mig del tram. */
+var TRAMS_MINUTS = [
+  { tram: '1-5',   minuts: 3 },
+  { tram: '6-10',  minuts: 8 },
+  { tram: '11-15', minuts: 13 },
+  { tram: '16-20', minuts: 18 },
+  { tram: '21-25', minuts: 23 },
+  { tram: '26-30', minuts: 28 },
+  { tram: '31-35', minuts: 33 },
+  { tram: '36-40', minuts: 38 }
+];
+
+function minutsDelTram_(tram) {
+  var t = text_(tram);
+  for (var i = 0; i < TRAMS_MINUTS.length; i++) {
+    if (TRAMS_MINUTS[i].tram === t) return TRAMS_MINUTS[i].minuts;
+  }
+  return '';
+}
+
 var CONFIG_INICIAL = [
   ['pin_staff', '1234'],
   ['equips', 'Sènior A'],
@@ -77,7 +121,10 @@ var CONFIG_INICIAL = [
   // Dies que es considera que toca entrenar. Serveixen per saber quantes
   // respostes s'esperen i, per tant, per calcular el compliment.
   ['dies_recordatori', 'dl,dc,dv'],
-  ['minuts_defecte', '90']
+  ['minuts_defecte', '90'],
+  // Tipus d'entrenament i els minuts que val cadascun, tal com es compten
+  // al club. Es toca aqui, no al codi.
+  ['tipus_sessio', 'Pista:75, Físic + pista:120, Doble sessió:120, Físic + pista + tècnic:160']
 ];
 
 var DIES_CODI = ['dg', 'dl', 'dm', 'dc', 'dj', 'dv', 'ds'];   // getUTCDay(): 0=diumenge
@@ -125,8 +172,10 @@ function setup() {
   if (afegir.length) conf.getRange(conf.getLastRow() + 1, 1, afegir.length, 2).setValues(afegir);
 
   var noms = omplirNomsJugadores_();
+  var codis = generaCodis_();
   ss.toast('Pestanyes preparades' + (noms ? ' · ' + noms + ' noms omplerts' : '') +
-           '. Omple Jugadores i Usuaris.', 'Rendiment MCBF', 8);
+           (codis ? ' · ' + codis + ' codis de jugadora generats' : '') +
+           '. Omple Jugadores i Usuaris.', 'Rendiment MCBF', 10);
 }
 
 /**
@@ -255,39 +304,41 @@ function configuracio_() {
   return c;
 }
 
+/* ------------------------------------------------------------------ *
+ *  Entrar amb codi                                                    *
+ * ------------------------------------------------------------------ */
+
 /**
- * Qui truca. Busca el PIN a la pestanya Usuaris i, si encara es buida, el
- * pin_staff de Config continua valent com a director: aixi res no es trenca
- * mentre no s'omple.
+ * Un sol codi per a tothom. Es mira primer a Jugadores i despres a Usuaris,
+ * i el full decideix quina pantalla obre l'app. Aixi ningu pot enviar dades
+ * fent-se passar per una altra: escriure demana el codi de qui escriu.
  *
- * Retorna { ok:true, usuari:{ nom, rol, equips } }. Un director te equips
- * buit i ho veu tot; un entrenador nomes veu els equips de la seva fila.
+ * Retorna { ok:true, data:{ tipus, ... } } o { ok:false, error:'CODI' }.
  */
-function identifica_(pin) {
+function entrar_(codi) {
   var props = PropertiesService.getScriptProperties();
   var fins = Number(props.getProperty('bloqueig_fins') || 0);
   if (fins && Date.now() < fins) {
-    return { ok: false, error: 'Massa intents. Torna-ho a provar en uns minuts.' };
+    return json_({ ok: false, error: 'Massa intents. Torna-ho a provar en uns minuts.' });
   }
 
-  pin = text_(pin);
+  codi = text_(codi);
   var trobat = null;
 
-  if (pin) {
-    var usuaris = [];
-    try { usuaris = files_('usuaris'); } catch (err) { usuaris = []; }   // encara sense pestanya
-    usuaris.forEach(function (u) {
-      if (trobat || text_(u.pin) !== pin) return;
-      var rol = text_(u.rol).toLowerCase();
-      var esEntrenador = rol.indexOf('entrenador') === 0;
+  if (codi) {
+    var jug = jugadores_('', true).filter(function (j) { return j.codi === codi; })[0];
+    if (jug) {
       trobat = {
-        nom: text_(u.nom) || 'Sense nom',
-        rol: esEntrenador ? 'entrenador' : 'director',
-        equips: esEntrenador ? llista_(u.equips) : []
+        tipus: 'jugadora',
+        jugadora: { id: jug.id, nom: jug.nom, dorsal: jug.dorsal, equip: jug.equip },
+        tipus_sessio: tipusDeSessio_(),
+        trams: TRAMS_MINUTS
       };
-    });
-    if (!trobat && pin === text_(configuracio_().pin_staff)) {
-      trobat = { nom: 'Cos tecnic', rol: 'director', equips: [] };
+    } else {
+      var u = usuariPerCodi_(codi);
+      if (u) {
+        trobat = { tipus: u.rol, usuari: u, trams: TRAMS_MINUTS };
+      }
     }
   }
 
@@ -295,7 +346,7 @@ function identifica_(pin) {
     props.deleteProperty('errades');
     props.deleteProperty('errades_des_de');
     props.deleteProperty('bloqueig_fins');
-    return { ok: true, usuari: trobat };
+    return json_({ ok: true, data: trobat });
   }
 
   var desDe = Number(props.getProperty('errades_des_de') || 0);
@@ -305,7 +356,234 @@ function identifica_(pin) {
   props.setProperty('errades_des_de', String(desDe));
   props.setProperty('errades', String(n));
   if (n >= MAX_ERRADES) props.setProperty('bloqueig_fins', String(Date.now() + FINESTRA_MS));
-  return { ok: false, error: 'PIN' };
+  return json_({ ok: false, error: 'CODI' });
+}
+
+/** L'usuari de l'staff que te aquest codi, o null. */
+function usuariPerCodi_(codi) {
+  var trobat = null;
+  var usuaris = [];
+  try { usuaris = files_('usuaris'); } catch (err) { usuaris = []; }
+  usuaris.forEach(function (u) {
+    if (trobat || text_(u.pin) !== codi) return;
+    var rol = text_(u.rol).toLowerCase();
+    var esEntrenador = rol.indexOf('entrenador') === 0;
+    trobat = {
+      nom: text_(u.nom) || 'Sense nom',
+      rol: esEntrenador ? 'entrenador' : 'director',
+      equips: esEntrenador ? llista_(u.equips) : []
+    };
+  });
+  // El pin_staff de Config segueix valent com a director mentre Usuaris
+  // estigui buida, per no deixar ningu fora.
+  if (!trobat && codi === text_(configuracio_().pin_staff)) {
+    trobat = { nom: 'Cos tecnic', rol: 'director', equips: [] };
+  }
+  return trobat;
+}
+
+/** La jugadora que te aquest codi, o null. Qualsevol escriptura hi passa. */
+function jugadoraPerCodi_(codi) {
+  codi = text_(codi);
+  if (!codi) return null;
+  return jugadores_('', true).filter(function (j) { return j.codi === codi; })[0] || null;
+}
+
+/** Tipus d'entrenament amb els seus minuts, tal com estan a Config. */
+function tipusDeSessio_() {
+  var cru = text_(configuracio_().tipus_sessio);
+  if (!cru) cru = 'Pista:75';
+  return cru.split(',').map(function (t) {
+    var p = t.split(':');
+    return { nom: text_(p[0]), minuts: num_(p[1]) || 0 };
+  }).filter(function (t) { return t.nom && t.minuts; });
+}
+
+function minutsDelTipus_(nom) {
+  nom = text_(nom);
+  var t = tipusDeSessio_().filter(function (x) { return x.nom === nom; })[0];
+  return t ? t.minuts : '';
+}
+
+/**
+ * Codis de 4 xifres per a les jugadores que encara no en tinguin. No en
+ * repeteix cap, ni dels que ja hi ha ni dels de l'staff: dos codis iguals
+ * voldrien dir que una jugadora entra com una altra persona.
+ */
+function generaCodis_() {
+  var sh = full_('jugadores');
+  var caps = capcalera_(sh);
+  var iCodi = caps.indexOf('codi'), iId = caps.indexOf('id');
+  if (iCodi === -1 || iId === -1 || sh.getLastRow() < 2) return 0;
+
+  var n = sh.getLastRow() - 1;
+  var dades = sh.getRange(2, 1, n, caps.length).getValues();
+
+  var usats = {};
+  try {
+    files_('usuaris').forEach(function (u) { if (text_(u.pin)) usats[text_(u.pin)] = true; });
+  } catch (err) { /* encara sense pestanya */ }
+  var pinStaff = text_(configuracio_().pin_staff);
+  if (pinStaff) usats[pinStaff] = true;
+  dades.forEach(function (f) { if (text_(f[iCodi])) usats[text_(f[iCodi])] = true; });
+
+  var columna = [];
+  var fets = 0;
+  for (var i = 0; i < n; i++) {
+    var actual = text_(dades[i][iCodi]);
+    if (actual || !text_(dades[i][iId])) { columna.push([actual]); continue; }
+    var codi = '';
+    for (var intent = 0; intent < 500 && !codi; intent++) {
+      var prova = String(Math.floor(1000 + Math.random() * 9000));
+      if (!usats[prova]) codi = prova;
+    }
+    if (!codi) { columna.push([actual]); continue; }
+    usats[codi] = true;
+    columna.push([codi]);
+    fets++;
+  }
+  if (fets) sh.getRange(2, iCodi + 1, n, 1).setValues(columna);
+  return fets;
+}
+
+/* ------------------------------------------------------------------ *
+ *  El que escriu l'entrenador                                         *
+ * ------------------------------------------------------------------ */
+
+/** Una fila per partit o entrenament. Clau: data + equip + tipus. */
+function desaSessio_(p, usuari) {
+  var data = dataISO_(p.data);
+  var equip = text_(p.equip);
+  var tipus = text_(p.tipus);
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return json_({ ok: false, error: 'Data no valida.' });
+  if (tipus !== 'partit' && tipus !== 'entrenament') return json_({ ok: false, error: 'Tipus no valid.' });
+  var permesos = equipsPermesos_(usuari);
+  if (permesos && permesos.indexOf(equip) === -1) {
+    return json_({ ok: false, error: "Aquest equip no es teu." });
+  }
+
+  var sh = full_('sessions');
+  var caps = capcalera_(sh);
+  var fila = {
+    id: text_(p.id) || Utilities.getUuid(),
+    data: data,
+    equip: equip,
+    tipus: tipus,
+    responsable: usuari ? usuari.nom : '',
+    valoracio: num_(p.valoracio),
+    objectiu: tipus === 'entrenament' ? siNo_(p.objectiu) : '',
+    comentari: text_(p.comentari),
+    timestamp: new Date().toISOString()
+  };
+  var valors = caps.map(function (c) { return fila[c] === undefined ? '' : fila[c]; });
+
+  var nFila = trobaPerClaus_(sh, caps, [['data', data], ['equip', equip], ['tipus', tipus]]);
+  if (nFila) sh.getRange(nFila, 1, 1, caps.length).setValues([valors]);
+  else sh.getRange(sh.getLastRow() + 1, 1, 1, caps.length).setValues([valors]);
+
+  return json_({ ok: true, data: { id: fila.id, actualitzat: !!nFila } });
+}
+
+/**
+ * Minuts jugats per cada jugadora en un partit. Despres d'escriure'ls,
+ * recalcula la carrega de les jugadores que ja havien contestat el partit:
+ * la carrega d'un partit surt de creuar la seva duresa amb aquests minuts,
+ * i les dues meitats no arriben alhora.
+ */
+function desaMinuts_(p, usuari) {
+  var data = dataISO_(p.data);
+  var equip = text_(p.equip);
+  var llista = p.minuts || [];
+
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return json_({ ok: false, error: 'Data no valida.' });
+  var permesos = equipsPermesos_(usuari);
+  if (permesos && permesos.indexOf(equip) === -1) {
+    return json_({ ok: false, error: "Aquest equip no es teu." });
+  }
+
+  var sh = full_('minuts');
+  var caps = capcalera_(sh);
+  var jugs = {};
+  jugadores_('', false).forEach(function (j) { jugs[j.id] = j; });
+
+  var escrites = 0;
+  llista.forEach(function (m) {
+    var idJ = text_(m.id_jugadora);
+    var tram = text_(m.tram);
+    if (!idJ || !jugs[idJ]) return;
+
+    var fila = {
+      id: text_(m.id) || Utilities.getUuid(),
+      data: data,
+      equip: equip,
+      id_jugadora: idJ,
+      nom_jugadora: jugs[idJ].nom,
+      minuts: tram ? minutsDelTram_(tram) : '',
+      tram: tram,
+      timestamp: new Date().toISOString()
+    };
+    var valors = caps.map(function (c) { return fila[c] === undefined ? '' : fila[c]; });
+    var nFila = trobaPerClaus_(sh, caps, [['data', data], ['id_jugadora', idJ]]);
+    if (nFila) sh.getRange(nFila, 1, 1, caps.length).setValues([valors]);
+    else sh.getRange(sh.getLastRow() + 1, 1, 1, caps.length).setValues([valors]);
+    escrites++;
+  });
+
+  var recalculades = recalculaCarregaPartit_(data);
+  return json_({ ok: true, data: { escrites: escrites, recalculades: recalculades } });
+}
+
+/** Posa minuts i carrega a les files de partit d'aquell dia. */
+function recalculaCarregaPartit_(data) {
+  var sh = full_('registres');
+  if (sh.getLastRow() < 2) return 0;
+  var caps = capcalera_(sh);
+  var iData = caps.indexOf('data'), iMoment = caps.indexOf('moment'),
+      iJug = caps.indexOf('id_jugadora'), iDuresa = caps.indexOf('duresa'),
+      iMinuts = caps.indexOf('minuts'), iCarrega = caps.indexOf('carrega');
+  if ([iData, iMoment, iJug, iDuresa, iMinuts, iCarrega].indexOf(-1) !== -1) return 0;
+
+  var minutsPerJug = {};
+  files_('minuts').forEach(function (m) {
+    if (dataISO_(m.data) === data) minutsPerJug[text_(m.id_jugadora)] = num_(m.minuts);
+  });
+
+  var rang = sh.getRange(2, 1, sh.getLastRow() - 1, caps.length);
+  var dades = rang.getValues();
+  var canviades = 0;
+  dades.forEach(function (f) {
+    if (dataISO_(f[iData]) !== data || text_(f[iMoment]) !== 'partit') return;
+    var mins = minutsPerJug[text_(f[iJug])];
+    if (mins === undefined || mins === '') return;
+    var duresa = num_(f[iDuresa]);
+    f[iMinuts] = mins;
+    f[iCarrega] = (duresa === '' ? '' : duresa * mins);
+    canviades++;
+  });
+  if (canviades) rang.setValues(dades);
+  return canviades;
+}
+
+/** Numero de fila que compleix totes les parelles columna/valor. */
+function trobaPerClaus_(sh, caps, parelles) {
+  if (sh.getLastRow() < 2) return 0;
+  var dades = sh.getRange(2, 1, sh.getLastRow() - 1, caps.length).getValues();
+  for (var i = 0; i < dades.length; i++) {
+    var totes = true;
+    for (var k = 0; k < parelles.length; k++) {
+      var col = caps.indexOf(parelles[k][0]);
+      if (col === -1) { totes = false; break; }
+      var valor = dades[i][col];
+      var esperat = parelles[k][1];
+      var iguals = (parelles[k][0] === 'data')
+        ? (dataISO_(valor) === esperat)
+        : (text_(valor) === esperat);
+      if (!iguals) { totes = false; break; }
+    }
+    if (totes) return i + 2;
+  }
+  return 0;
 }
 
 /**
@@ -332,7 +610,9 @@ function jugadores_(equip, nomesActives) {
         nom: text_(f.nom),
         dorsal: text_(f.dorsal),
         equip: text_(f.equip),
-        activa: esSi_(f.activa)
+        activa: esSi_(f.activa),
+        // Nomes per a entrar_(): cap resposta de l'API l'ha de portar mai.
+        codi: text_(f.codi)
       };
     });
 }
@@ -405,29 +685,44 @@ function registres_(desDe) {
  * ------------------------------------------------------------------ */
 
 /**
- * Una unica fila per jugadora, dia i moment. Si el mobil reenvia el mateix
- * (cua offline, doble toc, dos dispositius), s'actualitza la fila que ja
- * hi ha en comptes d'afegir-ne una de nova.
+ * Una unica fila per jugadora, dia i moment ('abans', 'despres', 'partit').
+ * Si el mobil reenvia el mateix (cua offline, doble toc, dos dispositius),
+ * s'actualitza la fila que ja hi ha en comptes d'afegir-ne una de nova.
+ *
+ * De qui es el registre ho diu el CODI, no el mobil: aixi ningu pot enviar
+ * dades fent-se passar per una altra jugadora.
  */
-function desaRegistre_(p) {
-  var idJ = text_(p.id_jugadora);
+function desaRegistre_(p, codi) {
+  var jug = jugadoraPerCodi_(codi);
+  if (!jug) return json_({ ok: false, error: 'CODI' });
+
+  var idJ = jug.id;
   var data = dataISO_(p.data);
   var moment = text_(p.moment);
 
-  if (!idJ) return json_({ ok: false, error: 'Falta la jugadora.' });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return json_({ ok: false, error: 'Data no valida: ' + data });
-  if (moment !== 'abans' && moment !== 'despres') return json_({ ok: false, error: 'Moment no valid: ' + moment });
+  if (['abans', 'despres', 'partit'].indexOf(moment) === -1) {
+    return json_({ ok: false, error: 'Moment no valid: ' + moment });
+  }
 
-  // Nomes s'accepten registres de jugadores que existeixen i estan actives:
-  // aixi el full no s'omple de files d'ids inventats.
-  var jug = jugadores_('', true).filter(function (j) { return j.id === idJ; })[0];
-  if (!jug) return json_({ ok: false, error: 'Aquesta jugadora no consta com a activa.' });
+  // La duresa arriba ja en escala 0-10 encara que la jugadora triï cares:
+  // canviar l'escala partiria la comparacio amb les setmanes velles.
+  var duresa = (moment === 'abans') ? '' : num_(p.duresa);
+  var tipus = (moment === 'despres') ? text_(p.tipus_sessio) : '';
+  var minuts = '';
+  var carrega = '';
 
-  var duresa = num_(p.duresa);
-  var minuts = num_(p.minuts);
-  // La carrega es calcula aqui, al servidor, perque els numeros del full
-  // es puguin revisar sense dependre del que hagi fet el mobil.
-  var carrega = (moment === 'despres' && duresa !== '' && minuts !== '') ? duresa * minuts : '';
+  if (moment === 'despres') {
+    minuts = tipus ? minutsDelTipus_(tipus) : num_(p.minuts);
+    if (minuts === '' || minuts === undefined) minuts = num_(p.minuts);
+    if (duresa !== '' && minuts !== '') carrega = duresa * minuts;
+  } else if (moment === 'partit') {
+    // Els minuts els posa l'entrenador, i poden arribar abans o despres
+    // que la jugadora contesti: si encara no hi son, la carrega queda en
+    // blanc i desaMinuts_() la reomple quan arribin.
+    minuts = minutsJugatsDe_(idJ, data);
+    if (duresa !== '' && minuts !== '') carrega = duresa * minuts;
+  }
 
   var fila = {
     id: text_(p.id) || Utilities.getUuid(),
@@ -438,12 +733,14 @@ function desaRegistre_(p) {
     son: moment === 'abans' ? num_(p.son) : '',
     fatiga: moment === 'abans' ? num_(p.fatiga) : '',
     anim: moment === 'abans' ? num_(p.anim) : '',
-    te_molestia: moment === 'abans' ? siNo_(p.te_molestia) : '',
+    te_molestia: (moment === 'abans' || moment === 'partit') ? siNo_(p.te_molestia) : '',
     zona_molestia: text_(p.zona_molestia),
     dolor: num_(p.dolor),
     limita: siNo_(p.limita),
-    duresa: moment === 'despres' ? duresa : '',
-    minuts: moment === 'despres' ? minuts : '',
+    valoracio: moment === 'abans' ? '' : num_(p.valoracio),
+    duresa: duresa,
+    tipus_sessio: tipus,
+    minuts: minuts,
     carrega: carrega,
     comentari: text_(p.comentari),
     timestamp: text_(p.timestamp) || new Date().toISOString()
@@ -457,7 +754,22 @@ function desaRegistre_(p) {
   if (nFila) sh.getRange(nFila, 1, 1, caps.length).setValues([valors]);
   else sh.getRange(sh.getLastRow() + 1, 1, 1, caps.length).setValues([valors]);
 
-  return json_({ ok: true, data: { id: fila.id, carrega: carrega === '' ? null : carrega, actualitzat: !!nFila } });
+  return json_({
+    ok: true,
+    data: { id: fila.id, carrega: carrega === '' ? null : carrega,
+            minuts: minuts === '' ? null : minuts, actualitzat: !!nFila }
+  });
+}
+
+/** Minuts que ha jugat una jugadora un dia, si l'entrenador ja els ha posat. */
+function minutsJugatsDe_(idJ, data) {
+  var trobat = '';
+  try {
+    files_('minuts').forEach(function (m) {
+      if (text_(m.id_jugadora) === idJ && dataISO_(m.data) === data) trobat = num_(m.minuts);
+    });
+  } catch (err) { /* encara sense pestanya */ }
+  return trobat;
 }
 
 /* Files que es miren de cop abans de plantejar-se llegir el full sencer.
@@ -515,7 +827,7 @@ function carregaEntre_(regs, idJ, desDe, finsA) {
   regs.forEach(function (r) {
     if (r.id_jugadora !== idJ) return;
     if (r.data < desDe || r.data > finsA) return;
-    if (r.moment !== 'despres') return;
+    if (r.moment !== 'despres' && r.moment !== 'partit') return;
     hiHaDades = true;
     t += Number(r.carrega) || 0;
   });
@@ -533,7 +845,9 @@ function carregaEntre_(regs, idJ, desDe, finsA) {
 function carreguesPerSetmana_(regs) {
   var index = {};
   regs.forEach(function (r) {
-    if (r.moment !== 'despres') return;
+    // El partit compta com una sessio mes: la seva carrega surt de la
+    // duresa que posa la jugadora pels minuts que posa l'entrenador.
+    if (r.moment !== 'despres' && r.moment !== 'partit') return;
     var dl = dillunsDe_(r.data);
     if (!dl) return;
     var meu = index[r.id_jugadora] || (index[r.id_jugadora] = {});
@@ -804,7 +1118,9 @@ function getJugadoraStaff_(id, nSetmanes, usuari) {
       return { data: r.data, zona: r.zona_molestia, dolor: r.dolor, limita: r.limita, comentari: r.comentari };
     });
 
-  return json_({ ok: true, data: { jugadora: j, setmanes: setmanes, molesties: molesties } });
+  // Sense el codi: es el que fa servir per entrar i no ha de viatjar mai.
+  var fitxa = { id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip, activa: j.activa };
+  return json_({ ok: true, data: { jugadora: fitxa, setmanes: setmanes, molesties: molesties } });
 }
 
 /* ------------------------------------------------------------------ *
@@ -829,26 +1145,27 @@ function doGet() {
  * distingeix d'un error de debo: manté el registre a la cua i ho torna a
  * provar sol una estona despres, sense dir res a la jugadora.
  */
+/**
+ * Una sola porta d'entrada.
+ *
+ * El pany (LockService) NOMES envolta les escriptures. Abans l'agafava tot,
+ * i obrir el panell —que son uns 7 segons— deixava clavades totes les
+ * jugadores que en aquell moment enviaven el seu registre.
+ *
+ * Quan el pany no s'allibera a temps es retorna 'ocupat', que el mobil
+ * distingeix d'un error de debo: manté el registre a la cua i ho torna a
+ * provar sol una estona despres, sense dir res a la jugadora.
+ */
 function doPost(e) {
   try {
     var body = JSON.parse(e.postData.contents);
     var action = text_(body.action);
+    var codi = text_(body.codi || body.pin_staff);
 
-    /* ---- Lectures obertes: sense pany ---- */
-    if (action === 'getJugadores') {
-      var conf = configuracio_();
-      return json_({
-        ok: true,
-        data: {
-          jugadores: jugadores_(text_(body.equip), true),
-          equips: llista_(conf.equips),
-          minuts_defecte: num_(conf.minuts_defecte) || 90,
-          dies_entrenament: llista_(conf.dies_recordatori)
-        }
-      });
-    }
+    /* ---- Entrar: l'unica accio que no demana res previ ---- */
+    if (action === 'entrar') return entrar_(codi);
 
-    /* ---- Escriptures: aqui si, d'una en una ---- */
+    /* ---- El que escriu la jugadora ---- */
     if (action === 'saveRegistre' || action === 'sync') {
       var lock = LockService.getScriptLock();
       try {
@@ -858,20 +1175,37 @@ function doPost(e) {
                        error: 'El full esta ocupat. Es tornara a provar tot sol.' });
       }
       try {
-        if (action === 'saveRegistre') return desaRegistre_(body.payload || {});
-        return sync_(body.operacions);
+        if (action === 'saveRegistre') return desaRegistre_(body.payload || {}, codi);
+        return sync_(body.operacions, codi);
       } finally {
         lock.releaseLock();
       }
     }
 
-    /* ---- La resta demana el PIN del cos tecnic (i tampoc no bloqueja) ---- */
-    var qui = identifica_(body.pin_staff);
-    if (!qui.ok) return json_(qui);
+    /* ---- La resta demana ser del cos tecnic ---- */
+    var usuari = usuariPerCodi_(codi);
+    if (!usuari) return json_({ ok: false, error: 'CODI' });
+
+    if (action === 'saveSessio' || action === 'saveMinuts') {
+      var pany = LockService.getScriptLock();
+      try {
+        pany.waitLock(25000);
+      } catch (err) {
+        return json_({ ok: false, ocupat: true,
+                       error: 'El full esta ocupat. Torna-ho a provar.' });
+      }
+      try {
+        if (action === 'saveSessio') return desaSessio_(body.payload || {}, usuari);
+        return desaMinuts_(body.payload || {}, usuari);
+      } finally {
+        pany.releaseLock();
+      }
+    }
 
     switch (action) {
-      case 'getPanell':   return getPanell_(body.equip, dataISO_(body.setmana), qui.usuari);
-      case 'getJugadora': return getJugadoraStaff_(body.id, body.n_setmanes, qui.usuari);
+      case 'getPanell':   return getPanell_(body.equip, dataISO_(body.setmana), usuari);
+      case 'getJugadora': return getJugadoraStaff_(body.id, body.n_setmanes, usuari);
+      case 'getPartit':   return getPartit_(dataISO_(body.data), text_(body.equip), usuari);
       default:            return json_({ ok: false, error: 'Accio desconeguda: ' + action });
     }
   } catch (err) {
@@ -880,15 +1214,51 @@ function doPost(e) {
 }
 
 /** Buida la cua d'un mobil: una sola espera de pany per a tots els registres. */
-function sync_(operacions) {
+function sync_(operacions, codi) {
   var resultats = (operacions || []).map(function (op) {
     var r;
     try {
-      r = JSON.parse(desaRegistre_(op.payload || {}).getContent());
+      r = JSON.parse(desaRegistre_(op.payload || {}, codi).getContent());
     } catch (err) {
       r = { ok: false, error: String(err && err.message ? err.message : err) };
     }
     return { opId: text_(op.opId), ok: !!r.ok, error: r.ok ? '' : (r.error || 'Error') };
   });
   return json_({ ok: true, data: { resultats: resultats } });
+}
+
+/**
+ * El que l'entrenador necessita per a la pantalla de partit d'un dia: les
+ * seves jugadores i els minuts que ja hi hagi posats, per poder corregir-los
+ * en comptes de tornar a començar.
+ */
+function getPartit_(data, equip, usuari) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return json_({ ok: false, error: 'Data no valida.' });
+  var permesos = equipsPermesos_(usuari);
+  if (permesos && permesos.indexOf(equip) === -1) {
+    return json_({ ok: false, error: "Aquest equip no es teu." });
+  }
+
+  var jugs = jugadores_(equip, true).map(function (j) {
+    return { id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip };
+  });
+
+  var trams = {};
+  try {
+    files_('minuts').forEach(function (m) {
+      if (dataISO_(m.data) === data) trams[text_(m.id_jugadora)] = text_(m.tram);
+    });
+  } catch (err) { /* encara sense pestanya */ }
+
+  var sessio = null;
+  try {
+    files_('sessions').forEach(function (s) {
+      if (dataISO_(s.data) === data && text_(s.equip) === equip && text_(s.tipus) === 'partit') {
+        sessio = { valoracio: num_(s.valoracio), comentari: text_(s.comentari) };
+      }
+    });
+  } catch (err) { /* encara sense pestanya */ }
+
+  return json_({ ok: true, data: { data: data, equip: equip, jugadores: jugs,
+                                   trams: trams, sessio: sessio, llista_trams: TRAMS_MINUTS } });
 }

@@ -29,9 +29,10 @@ càlcul propi, desplegament d'Apps Script propi i PIN propi.
 3. Executa la funció **`setup`** (▶). Crea les pestanyes `Jugadores`,
    `Registres` i `Config`.
 4. Omple **`Jugadores`**: una fila per jugadora amb `id` (qualsevol text únic:
-   `j01`, `j02`…), `nom`, `dorsal`, `equip` i `activa` = `SI`.
+   `j01`, `j02`…), `nom`, `dorsal`, `equip` i `activa` = `SI`. La columna
+   **`codi`** l'omple `setup()` sola: és amb què entra cada jugadora a l'app.
 5. Omple **`Usuaris`**: una fila per persona del cos tècnic (vegeu *Qui veu què*).
-6. A **`Config`**, canvia el `pin_staff` i repassa la resta de claus.
+6. A **`Config`**, repassa `tipus_sessio`, `dies_recordatori` i la resta de claus.
 7. **Desplega → Nou desplegament → Aplicació web** (executant com a tu, accés
    per a qualsevol persona) i enganxa la URL `/exec` a `CONFIG.API_URL`, dins
    `index.html`.
@@ -76,6 +77,25 @@ Les columnes **es poden reordenar** com vulguis: tot s'hi accedeix pel nom de
 la capçalera, mai per posició. I `setup()` afegeix les columnes que falten
 sense moure res del que ja hi ha, així que es pot tornar a executar sempre.
 
+## Entrar: un sol codi
+
+No hi ha cap llista de noms a la pantalla d'entrada. Cadascú escriu el seu codi
+i el full decideix què obre:
+
+| Qui | On té el codi | Què veu |
+|---|---|---|
+| Jugadora | columna `codi` de `Jugadores` | les seves pantalles i el seu resum |
+| Entrenador | columna `pin` de `Usuaris` | el panell del seu equip |
+| Director | columna `pin` de `Usuaris`, rol `director` | el panell de tots els equips |
+
+`setup()` genera els codis que falten, de 4 xifres, i no en repeteix cap: ni
+entre jugadores ni amb els de l'staff. Per canviar-ne un, escriu-lo a mà a la
+casella; per treure l'accés a algú, esborra'l.
+
+**Escriure demana el codi de qui escriu.** El full no es fia de l'identificador
+que li arriba: mira de qui és el codi i desa el registre a aquella jugadora.
+Abans qualsevol podia enviar dades fent-se passar per una altra.
+
 ## Qui veu què
 
 Cada persona del cos tècnic té el seu PIN a la pestanya **`Usuaris`**:
@@ -116,10 +136,32 @@ No és només documentació: està al codi.
 - El full ha de quedar **restringit** als comptes del cos tècnic de rendiment.
 - L'app registra i avisa; no diagnostica ni recomana res.
 
+## Què registra cadascú
+
+**La jugadora**, des de la seva pantalla:
+
+- **Abans**: son, cansament, ànim i molèstia (amb el mapa corporal si n'hi ha).
+- **Després**: quin entrenament ha fet —els tipus i els seus minuts són a
+  `Config` → `tipus_sessio`— i com de dur ha estat, amb cinc cares.
+- **Dia de partit**: com ha anat, com de dur, molèstia i un comentari.
+
+**L'entrenador**, des del panell:
+
+- **Dia de partit**: els minuts de cada jugadora per trams i com ha anat el
+  partit.
+- **Dia d'entrenament**: com ha anat, si s'ha complert l'objectiu i un
+  comentari.
+
+Les cares de duresa es guarden **en escala 0–10** (2, 4, 6, 8, 10) encara que
+la jugadora en vegi cinc: la càrrega és `duresa × minuts` i canviar l'escala
+hauria partit la comparació amb les setmanes ja registrades.
+
 ## Càlculs
 
 ```
 carrega_sessio  = duresa × minuts          (es calcula al servidor)
+                  entrenament: els minuts del tipus de sessió
+                  partit: els minuts del tram que posa l'entrenador
 carrega_setmana = suma de les càrregues de dilluns a diumenge
 mitjana_previa  = mitjana de les 3 setmanes anteriors
 ratio           = carrega_setmana / mitjana_previa

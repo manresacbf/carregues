@@ -45,14 +45,30 @@ const ESC_ANIM = [
   { v: 5, e: '😃', l: 'Molt bo' }
 ];
 
+/* La duresa es guarda en escala 0-10 encara que la jugadora triï entre cinc
+   cares: la carrega es duresa x minuts i canviar l'escala partiria la
+   comparacio amb les setmanes ja registrades. */
+const ESC_DURESA = [
+  { v: 2,  e: '😌', l: 'Molt suau' },
+  { v: 4,  e: '🙂', l: 'Suau' },
+  { v: 6,  e: '😐', l: 'Normal' },
+  { v: 8,  e: '😓', l: 'Dura' },
+  { v: 10, e: '🥵', l: 'Molt dura' }
+];
+const ESC_COM_HA_ANAT = [
+  { v: 1, e: '😞', l: 'Molt malament' },
+  { v: 2, e: '😕', l: 'Malament' },
+  { v: 3, e: '😐', l: 'Normal' },
+  { v: 4, e: '🙂', l: 'Bé' },
+  { v: 5, e: '😃', l: 'Molt bé' }
+];
+
 const DIES_CURT = ['dl', 'dm', 'dc', 'dj', 'dv', 'ds', 'dg'];
 
 const CLAUS = {
-  jo: 'carregues.jo',
-  roster: 'carregues.roster',
+  sessio: 'carregues.sessio',
   meus: 'carregues.meus',
   pendents: 'carregues.pendents',
-  staff: 'carregues.staff',
   panell: 'carregues.panell'
 };
 
@@ -60,15 +76,15 @@ const CLAUS = {
    2. ESTAT
    ───────────────────────────────────────────────────────────────────── */
 
-let jo = null;                 // { id, nom, dorsal, equip }
-let roster = { jugadores: [], equips: [], minuts_defecte: 90, dies_entrenament: [], ts: '' };
+// Qui ha entrat en aquest mòbil. El codi val tant per a una jugadora com
+// per a l'staff: el full mira a quina de les dues llistes és.
+let sessio = { codi: '', tipus: '', jugadora: null, usuari: null, tipus_sessio: [], trams: [] };
+let jo = null;                 // la jugadora, quan el codi és d'una jugadora
 let meus = [];                 // registres propis, per al resum
 let pendents = [];
-let staff = { pin: '' };
 let sincronitzant = false;
 let idReintent;
-let equipTriat = '';
-let carregantRoster = false;
+let equipTriat = '';           // equip triat a les pantalles de l'entrenador
 
 /* ─────────────────────────────────────────────────────────────────────
    3. UTILITATS
@@ -156,7 +172,7 @@ const LIMIT_TOTAL = 60000;
 async function api(action, extra, intents) {
   if (!CONFIG.API_URL) throw new Error('Falta configurar API_URL');
   intents = intents || 3;
-  const cos = Object.assign({ action: action }, extra || {});
+  const cos = Object.assign({ action: action, codi: sessio.codi }, extra || {});
   const INICI = Date.now();
   let ultim;
 
@@ -267,78 +283,88 @@ async function sincronitza(manual) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   6. QUI ETS
-   ───────────────────────────────────────────────────────────────────── */
+   6. ENTRAR AMB CODI
+   ───────────────────────────────────────────────────────────────────── *
+   Un sol camp per a tothom. El full mira el codi i diu si és d'una
+   jugadora, d'un entrenador o del director, i l'app obre el que toqui.
+   La llista de noms ja no es reparteix a ningú.                        */
 
-async function carregaRoster(silenci) {
-  carregantRoster = true;
-  if (!jo && soAlSelectorDeNoms()) pintaQui();
-  try {
-    const res = await api('getJugadores', { equip: equipTriat }, 3);
-    if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
-    roster = Object.assign(roster, res.data, { ts: new Date().toISOString() });
-    guarda(CLAUS.roster, roster);
-    carregantRoster = false;
-    return true;
-  } catch (err) {
-    if (!silenci && CONFIG.API_URL) {
-      // Sense botó, l'única sortida seria tancar i tornar a obrir l'app.
-      $('#qui-error').innerHTML = (navigator.onLine
-        ? 'El full no ha contestat. '
-        : 'Sense connexió: cal cobertura el primer cop. ') +
-        '<button type="button" class="chip" id="qui-reintenta" style="min-height:34px">Tornar-ho a provar</button>';
-      $('#qui-reintenta').addEventListener('click', () => {
-        $('#qui-error').textContent = '';
-        carregaRoster(false).then(() => { if (!jo && soAlSelectorDeNoms()) pintaQui(); });
-      });
-    }
-    carregantRoster = false;
-    return false;
-  }
+function esStaff() {
+  return sessio.tipus === 'entrenador' || sessio.tipus === 'director';
 }
 
-/** Si l'usuari ja ha marxat cap al PIN del cos tècnic, la llista de noms
-    que arriba tard no l'ha de tornar enrere. */
-function soAlSelectorDeNoms() {
-  const v = $('#vista-qui');
-  return v && !v.classList.contains('amagat');
-}
+function guardaSessio() { guarda(CLAUS.sessio, sessio); }
 
-function pintaQui() {
+function pintaEntrada(missatge) {
   $('#vista-app').classList.add('amagat');
   $('#vista-qui').classList.remove('amagat');
+  $('#codi-error').textContent = missatge || '';
+  const camp = $('#codi');
+  camp.value = '';
+  setTimeout(() => { try { camp.focus(); } catch (e) { /* res */ } }, 100);
+}
 
-  const equips = roster.equips || [];
-  const selEquip = $('#camp-equip');
-  if (equips.length > 1) {
-    selEquip.classList.remove('amagat');
-    $('#equip').innerHTML = '<option value="">Tots</option>' +
-      equips.map((e) => '<option value="' + esc(e) + '"' + (e === equipTriat ? ' selected' : '') + '>' + esc(e) + '</option>').join('');
-    $('#equip').onchange = () => { equipTriat = $('#equip').value; pintaQui(); };
-  } else {
-    selEquip.classList.add('amagat');
+async function entraAmbCodi(ev) {
+  if (ev) ev.preventDefault();
+  const codi = $('#codi').value.trim();
+  const boto = $('#codi-entra');
+  const err = $('#codi-error');
+
+  if (!codi) { err.textContent = 'Escriu el teu codi.'; return; }
+
+  boto.disabled = true;
+  boto.textContent = 'Comprovant…';
+  err.textContent = '';
+
+  const anterior = sessio.codi;
+  sessio.codi = codi;
+  try {
+    const res = await api('entrar', {}, 4);
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
+    const d = res.data;
+
+    // Si entra algú altre en aquest mòbil, el que hi havia desat no és seu.
+    if (anterior && anterior !== codi) {
+      meus = []; guardaMeus();
+      localStorage.removeItem(CLAUS.panell);
+      panell = null;
+    }
+
+    sessio = {
+      codi: codi,
+      tipus: d.tipus,
+      jugadora: d.jugadora || null,
+      usuari: d.usuari || null,
+      tipus_sessio: d.tipus_sessio || [],
+      trams: d.trams || []
+    };
+    jo = sessio.jugadora;
+    guardaSessio();
+    obreApp(esStaff() ? '#/panell' : '#/inici');
+  } catch (e) {
+    sessio.codi = anterior;
+    const motiu = String(e && e.message ? e.message : e);
+    if (motiu === 'CODI') err.textContent = 'Aquest codi no és de ningú.';
+    else if (!navigator.onLine) err.textContent = 'Cal cobertura per entrar el primer cop.';
+    else err.textContent = 'El full no ha contestat (' + motiu + '). Torna-ho a provar.';
+  } finally {
+    boto.disabled = false;
+    boto.textContent = 'Entrar';
   }
+}
 
-  const llista = (roster.jugadores || []).filter((j) => !equipTriat || j.equip === equipTriat);
-  $('#llista-qui').innerHTML = llista.length
-    ? llista.map((j) =>
-        '<button type="button" class="fila-jug" data-id="' + esc(j.id) + '">' +
-          '<span class="dorsal">' + esc(j.dorsal || '—') + '</span>' +
-          '<span class="nom">' + esc(j.nom) + '</span>' +
-        '</button>').join('')
-    : (carregantRoster
-        ? '<p class="buit">Carregant la llista…</p>'
-        : '<p class="buit">Encara no hi ha cap jugadora activa al full.</p>');
-
-  $$('#llista-qui [data-id]').forEach((b) => {
-    b.addEventListener('click', () => {
-      const j = (roster.jugadores || []).filter((x) => x.id === b.getAttribute('data-id'))[0];
-      if (!j) return;
-      jo = { id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip };
-      guarda(CLAUS.jo, jo);
-      obreApp('#/inici');
-    });
-  });
+/** Tanca la sessió d'aquest mòbil i esborra el que hi havia desat. */
+function surtDeTot() {
+  sessio = { codi: '', tipus: '', jugadora: null, usuari: null, tipus_sessio: [], trams: [] };
+  jo = null;
+  meus = [];
+  panell = null;
+  equipPanell = '';
+  guardaMeus();
+  localStorage.removeItem(CLAUS.sessio);
+  localStorage.removeItem(CLAUS.panell);
+  location.hash = '';
+  pintaEntrada();
 }
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -360,27 +386,31 @@ function obreApp(hash) {
   ruta();
 }
 
-function ruta() {
-  const r = rutaActual();
-  const staffVistes = ['staff', 'panell', 'fitxa'];
+const VISTES_STAFF = ['panell', 'fitxa', 'partit-staff', 'entreno-staff'];
 
-  if (staffVistes.indexOf(r.vista) !== -1) {
-    $('#vista-qui').classList.add('amagat');
-    $('#vista-app').classList.remove('amagat');
-  } else if (!jo) {
-    pintaQui();
-    return;
-  }
+function ruta() {
+  if (!sessio.codi) { pintaEntrada(); return; }
+  const r = rutaActual();
+
+  // Ningú entra on no li toca ni escrivint-ho a l'adreça.
+  if (VISTES_STAFF.indexOf(r.vista) !== -1 && !esStaff()) { ves('#/inici'); return; }
+  if (VISTES_STAFF.indexOf(r.vista) === -1 && esStaff() && r.vista !== 'inici') { ves('#/panell'); return; }
+  if (esStaff() && r.vista === 'inici') { ves('#/panell'); return; }
+
+  $('#vista-qui').classList.add('amagat');
+  $('#vista-app').classList.remove('amagat');
 
   const enrere = $('#enrere');
-  enrere.classList.toggle('amagat', r.vista === 'inici');
+  enrere.classList.toggle('amagat', r.vista === 'inici' || (esStaff() && r.vista === 'panell'));
 
   if (r.vista === 'abans') pintaAbans();
   else if (r.vista === 'despres') pintaDespres();
+  else if (r.vista === 'partit') pintaPartit();
   else if (r.vista === 'resum') pintaResum();
-  else if (r.vista === 'staff') pintaStaffPin();
   else if (r.vista === 'panell') pintaPanell();
   else if (r.vista === 'fitxa') pintaFitxa(r.id);
+  else if (r.vista === 'partit-staff') pintaPartitStaff();
+  else if (r.vista === 'entreno-staff') pintaEntrenoStaff();
   else pintaInici();
 
   window.scrollTo(0, 0);
@@ -393,14 +423,13 @@ function ruta() {
 function pintaInici() {
   $('#titol').textContent = 'Rendiment';
   const avui = avuiISO();
-  const a = registreDe(avui, 'abans');
-  const d = registreDe(avui, 'despres');
+  const fet = (moment) => !!registreDe(avui, moment);
 
-  const rajola = (hash, ic, tit, sub, fet) =>
-    '<button type="button" class="accio' + (fet ? ' fet' : '') + '" data-ves="' + hash + '">' +
+  const rajola = (hash, ic, tit, sub, jaFet) =>
+    '<button type="button" class="accio' + (jaFet ? ' fet' : '') + '" data-ves="' + hash + '">' +
       '<span class="ic">' + ic + '</span>' +
       '<span><span class="tit">' + tit + '</span><br><span class="sub">' + sub + '</span></span>' +
-      (fet ? '<span class="fetmarca">✓ fet</span>' : '') +
+      (jaFet ? '<span class="fetmarca">✓ fet</span>' : '') +
     '</button>';
 
   $('#contingut').innerHTML =
@@ -408,32 +437,119 @@ function pintaInici() {
     '<p class="hola">Hola, ' + esc((jo.nom || '').split(' ')[0]) + '</p>' +
     '<p class="meta" style="margin:0 0 16px">' + esc(jo.equip || '') + '</p>' +
 
-    rajola('#/abans', '🌅', 'Abans de l\'entrenament', 'Com arribes avui?', !!a) +
-    rajola('#/despres', '🌙', 'Després de l\'entrenament', 'Com ha anat la sessió?', !!d) +
+    rajola('#/abans', '🌅', 'Abans de l\'entrenament', 'Com arribes avui?', fet('abans')) +
+    rajola('#/despres', '🌙', 'Després de l\'entrenament', 'Com ha anat la sessió?', fet('despres')) +
+    rajola('#/partit', '🏀', 'Dia de partit', 'Com ha anat el partit?', fet('partit')) +
     rajola('#/resum', '📈', 'El meu resum', 'La teva setmana i la teva càrrega', false) +
 
     '<p class="meta" style="text-align:center; margin-top:22px">' +
-      'No ets ' + esc((jo.nom || '').split(' ')[0]) + '? ' +
-      '<button type="button" class="chip" id="canvia-jug" style="min-height:34px">Canviar de jugadora</button>' +
-    '</p>' +
-    '<p class="meta" style="text-align:center; margin-top:10px">' +
-      '<button type="button" class="chip" id="ves-staff" style="min-height:34px">Cos tècnic</button>' +
+      '<button type="button" class="chip" id="surt" style="min-height:34px">Sortir</button>' +
     '</p>';
 
   $$('#contingut [data-ves]').forEach((b) => b.addEventListener('click', () => ves(b.getAttribute('data-ves'))));
-  $('#canvia-jug').addEventListener('click', () => {
-    jo = null;
-    localStorage.removeItem(CLAUS.jo);
-    // Els registres del resum són de qui hi havia abans: fora.
-    meus = []; guardaMeus();
-    location.hash = '';
-    pintaQui();
+  $('#surt').addEventListener('click', () => {
+    if (pendents.length && !confirm('Encara queda alguna cosa per enviar. Segur que vols sortir?')) return;
+    surtDeTot();
   });
-  $('#ves-staff').addEventListener('click', () => ves(staff.pin ? '#/panell' : '#/staff'));
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   9. ABANS DE L'ENTRENAMENT
+   9. LA MOLÈSTIA  (la fan servir el formulari d'abans i el de partit)
+   ───────────────────────────────────────────────────────────────────── */
+
+let zonaTriada = '';
+
+function htmlMolestia() {
+  return '<div class="pregunta" style="margin-bottom:0">' +
+      '<div class="q">Tens alguna molèstia?</div>' +
+      '<div class="sino" id="te-molestia">' +
+        '<button type="button" data-valor="no" aria-pressed="false">No</button>' +
+        '<button type="button" data-valor="si" aria-pressed="false">Sí</button>' +
+      '</div>' +
+    '</div>' +
+    '</div>' +
+    '<div class="card amagat" id="bloc-molestia">' +
+      '<div class="eyebrow">On et fa mal</div>' +
+      '<div id="mapa"></div>' +
+      '<div class="pregunta" style="margin:18px 0 0">' +
+        '<div class="q">Quant et fa mal?</div>' +
+        blocNumeros('dolor', 0, 10, '0 gens', '10 moltíssim') +
+      '</div>' +
+      '<div class="pregunta" style="margin:18px 0 0">' +
+        '<div class="q">Et limita per entrenar?</div>' +
+        '<div class="sino" id="limita">' +
+          '<button type="button" data-valor="no" aria-pressed="false">No</button>' +
+          '<button type="button" data-valor="si" aria-pressed="false">Sí</button>' +
+        '</div>' +
+      '</div>';
+}
+
+function enganxaMolestia() {
+  enganxaUnicaTria('[data-numeros="dolor"]');
+  enganxaUnicaTria('#limita');
+  enganxaUnicaTria('#te-molestia');
+  // El detall només apareix si cal: qui no en té, no el veu.
+  $$('#te-molestia button').forEach((b) => b.addEventListener('click', () => {
+    const si = $('#te-molestia button[data-valor="si"]').getAttribute('aria-pressed') === 'true';
+    $('#bloc-molestia').classList.toggle('amagat', !si);
+    if (si && !$('#mapa').children.length) montaMapa();
+  }));
+}
+
+function dadesMolestia() {
+  const si = $('#te-molestia button[data-valor="si"]').getAttribute('aria-pressed') === 'true';
+  const no = $('#te-molestia button[data-valor="no"]').getAttribute('aria-pressed') === 'true';
+  return {
+    contestada: si || no,
+    te_molestia: si,
+    zona_molestia: si ? zonaTriada : '',
+    dolor: si ? triat('[data-numeros="dolor"]') : null,
+    limita: si && $('#limita button[data-valor="si"]').getAttribute('aria-pressed') === 'true'
+  };
+}
+
+function montaMapa() {
+  $('#mapa').appendChild(document.getElementById('tpl-cos').content.cloneNode(true));
+
+  const mostra = () => { $('#zona-triada').textContent = zonaTriada || 'Toca on et fa mal'; };
+  const totes = () => $$('#mapa .zona').concat($$('#mapa .zona-boto'));
+
+  totes().forEach((z) => {
+    const nom = z.getAttribute('data-zona') +
+      (z.getAttribute('data-costat') ? ' ' + z.getAttribute('data-costat') : '');
+    z.addEventListener('click', () => {
+      const ja = z.getAttribute('aria-pressed') === 'true';
+      totes().forEach((x) => x.setAttribute('aria-pressed', 'false'));
+      z.setAttribute('aria-pressed', ja ? 'false' : 'true');
+      zonaTriada = ja ? '' : nom;
+      mostra();
+    });
+  });
+  mostra();
+}
+
+/** Deixa la molèstia com estava en un registre ja enviat. */
+function reomplMolestia(r) {
+  const marca = (sel, valor) => {
+    const b = $(sel + ' button[data-valor="' + valor + '"]');
+    if (b) b.setAttribute('aria-pressed', 'true');
+  };
+  marca('#te-molestia', r.te_molestia ? 'si' : 'no');
+  if (!r.te_molestia) return;
+  $('#bloc-molestia').classList.remove('amagat');
+  montaMapa();
+  zonaTriada = r.zona_molestia || '';
+  $('#zona-triada').textContent = zonaTriada || 'Toca on et fa mal';
+  $$('#mapa .zona').concat($$('#mapa .zona-boto')).forEach((z) => {
+    const nom = z.getAttribute('data-zona') + (z.getAttribute('data-costat') ? ' ' + z.getAttribute('data-costat') : '');
+    if (nom === zonaTriada) z.setAttribute('aria-pressed', 'true');
+  });
+  if (r.dolor !== null && r.dolor !== '') marca('[data-numeros="dolor"]', r.dolor);
+  marca('#limita', r.limita ? 'si' : 'no');
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   10. ABANS DE L'ENTRENAMENT
    ───────────────────────────────────────────────────────────────────── */
 
 function blocEscala(clau, pregunta, escala) {
@@ -467,190 +583,117 @@ function triat(sel) {
   return b ? Number(b.getAttribute('data-valor')) : null;
 }
 
+function blocComentari(text) {
+  return '<div class="card"><div class="camp" style="margin:0">' +
+    '<label for="comentari">' + text + '</label>' +
+    '<textarea id="comentari"></textarea></div></div>';
+}
+
 function pintaAbans() {
   $('#titol').textContent = 'Abans';
   const previ = registreDe(avuiISO(), 'abans');
+  zonaTriada = '';
 
   $('#contingut').innerHTML =
     '<div class="card">' +
       blocEscala('son', 'Com has dormit?', ESC_SON) +
       blocEscala('fatiga', 'Com estàs de cansada?', ESC_FATIGA) +
       blocEscala('anim', 'Com estàs d\'ànim?', ESC_ANIM) +
-      '<div class="pregunta" style="margin-bottom:0">' +
-        '<div class="q">Tens alguna molèstia?</div>' +
-        '<div class="sino" id="te-molestia">' +
-          '<button type="button" data-valor="no" aria-pressed="false">No</button>' +
-          '<button type="button" data-valor="si" aria-pressed="false">Sí</button>' +
-        '</div>' +
-      '</div>' +
+      htmlMolestia() +
     '</div>' +
-
-    '<div class="card amagat" id="bloc-molestia">' +
-      '<div class="eyebrow">On et fa mal</div>' +
-      '<div id="mapa"></div>' +
-      '<div class="pregunta" style="margin:18px 0 0">' +
-        '<div class="q">Quant et fa mal?</div>' +
-        blocNumeros('dolor', 0, 10, '0 gens', '10 moltíssim') +
-      '</div>' +
-      '<div class="pregunta" style="margin:18px 0 0">' +
-        '<div class="q">Et limita per entrenar?</div>' +
-        '<div class="sino" id="limita">' +
-          '<button type="button" data-valor="no" aria-pressed="false">No</button>' +
-          '<button type="button" data-valor="si" aria-pressed="false">Sí</button>' +
-        '</div>' +
-      '</div>' +
-    '</div>' +
-
-    '<div class="card"><div class="camp" style="margin:0">' +
-      '<label for="comentari">Vols afegir alguna cosa? (opcional)</label>' +
-      '<textarea id="comentari"></textarea>' +
-    '</div></div>' +
-
+    blocComentari('Vols afegir alguna cosa? (opcional)') +
     '<button class="btn" id="desa">' + (previ ? 'Actualitzar' : 'Enviar') + '</button>' +
     (previ ? '<p class="meta" style="text-align:center;margin-top:9px">Avui ja has contestat: si envies, s\'actualitza.</p>' : '');
 
   ['son', 'fatiga', 'anim'].forEach((k) => enganxaUnicaTria('[data-escala="' + k + '"]'));
-  enganxaUnicaTria('[data-numeros="dolor"]');
-  enganxaUnicaTria('#limita');
-  enganxaUnicaTria('#te-molestia');
+  enganxaMolestia();
 
-  // El detall de la molèstia només apareix si cal: qui no en té, no el veu.
-  $$('#te-molestia button').forEach((b) => b.addEventListener('click', () => {
-    const si = $('#te-molestia button[data-valor="si"]').getAttribute('aria-pressed') === 'true';
-    $('#bloc-molestia').classList.toggle('amagat', !si);
-    if (si && !$('#mapa').children.length) montaMapa();
-  }));
-
-  if (previ) reomple(previ);
-  $('#desa').addEventListener('click', desaAbans);
-}
-
-let zonaTriada = '';
-
-function montaMapa() {
-  $('#mapa').appendChild(document.getElementById('tpl-cos').content.cloneNode(true));
-
-  const mostra = () => { $('#zona-triada').textContent = zonaTriada || 'Toca on et fa mal'; };
-  const totes = () => $$('#mapa .zona').concat($$('#mapa .zona-boto'));
-
-  totes().forEach((z) => {
-    const nom = z.getAttribute('data-zona') +
-      (z.getAttribute('data-costat') ? ' ' + z.getAttribute('data-costat') : '');
-    z.addEventListener('click', () => {
-      const ja = z.getAttribute('aria-pressed') === 'true';
-      totes().forEach((x) => x.setAttribute('aria-pressed', 'false'));
-      z.setAttribute('aria-pressed', ja ? 'false' : 'true');
-      zonaTriada = ja ? '' : nom;
-      mostra();
-    });
-  });
-  mostra();
-}
-
-function reomple(r) {
-  const marca = (sel, valor) => {
-    const b = $(sel + ' button[data-valor="' + valor + '"]');
-    if (b) b.setAttribute('aria-pressed', 'true');
-  };
-  if (r.son) marca('[data-escala="son"]', r.son);
-  if (r.fatiga) marca('[data-escala="fatiga"]', r.fatiga);
-  if (r.anim) marca('[data-escala="anim"]', r.anim);
-  marca('#te-molestia', r.te_molestia ? 'si' : 'no');
-  if (r.te_molestia) {
-    $('#bloc-molestia').classList.remove('amagat');
-    montaMapa();
-    zonaTriada = r.zona_molestia || '';
-    $('#zona-triada').textContent = zonaTriada || 'Toca on et fa mal';
-    $$('#mapa .zona').concat($$('#mapa .zona-boto')).forEach((z) => {
-      const nom = z.getAttribute('data-zona') + (z.getAttribute('data-costat') ? ' ' + z.getAttribute('data-costat') : '');
-      if (nom === zonaTriada) z.setAttribute('aria-pressed', 'true');
-    });
-    if (r.dolor !== null && r.dolor !== '') marca('[data-numeros="dolor"]', r.dolor);
-    marca('#limita', r.limita ? 'si' : 'no');
+  if (previ) {
+    const marca = (sel, valor) => {
+      const b = $(sel + ' button[data-valor="' + valor + '"]');
+      if (b) b.setAttribute('aria-pressed', 'true');
+    };
+    if (previ.son) marca('[data-escala="son"]', previ.son);
+    if (previ.fatiga) marca('[data-escala="fatiga"]', previ.fatiga);
+    if (previ.anim) marca('[data-escala="anim"]', previ.anim);
+    reomplMolestia(previ);
+    if (previ.comentari) $('#comentari').value = previ.comentari;
   }
-  if (r.comentari) $('#comentari').value = r.comentari;
-}
 
-function desaAbans() {
-  const son = triat('[data-escala="son"]');
-  const fatiga = triat('[data-escala="fatiga"]');
-  const anim = triat('[data-escala="anim"]');
-  const molestiaSi = $('#te-molestia button[data-valor="si"]').getAttribute('aria-pressed') === 'true';
-  const molestiaNo = $('#te-molestia button[data-valor="no"]').getAttribute('aria-pressed') === 'true';
+  $('#desa').addEventListener('click', () => {
+    const son = triat('[data-escala="son"]');
+    const fatiga = triat('[data-escala="fatiga"]');
+    const anim = triat('[data-escala="anim"]');
+    const mol = dadesMolestia();
 
-  if (!son || !fatiga || !anim) { avisa('Contesta les tres primeres preguntes', true); return; }
-  if (!molestiaSi && !molestiaNo) { avisa('Digues si tens alguna molèstia', true); return; }
+    if (!son || !fatiga || !anim) { avisa('Contesta les tres primeres preguntes', true); return; }
+    if (!mol.contestada) { avisa('Digues si tens alguna molèstia', true); return; }
 
-  encua({
-    id: uuid(),
-    id_jugadora: jo.id,
-    data: avuiISO(),
-    moment: 'abans',
-    son: son,
-    fatiga: fatiga,
-    anim: anim,
-    te_molestia: molestiaSi,
-    zona_molestia: molestiaSi ? zonaTriada : '',
-    dolor: molestiaSi ? triat('[data-numeros="dolor"]') : null,
-    limita: molestiaSi && $('#limita button[data-valor="si"]').getAttribute('aria-pressed') === 'true',
-    comentari: $('#comentari').value.trim(),
-    timestamp: new Date().toISOString()
+    encua(Object.assign({
+      id: uuid(), data: avuiISO(), moment: 'abans',
+      son: son, fatiga: fatiga, anim: anim,
+      comentari: $('#comentari').value.trim(),
+      timestamp: new Date().toISOString()
+    }, mol));
+    zonaTriada = '';
+    avisa('Rebut. Bon entrenament!');
+    ves('#/inici');
   });
-  zonaTriada = '';
-  avisa('Rebut. Bon entrenament!');
-  ves('#/inici');
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   10. DESPRÉS DE L'ENTRENAMENT
+   11. DESPRÉS DE L'ENTRENAMENT
    ───────────────────────────────────────────────────────────────────── */
+
+function blocTipusSessio(triat) {
+  const tipus = sessio.tipus_sessio || [];
+  if (!tipus.length) return '';
+  return '<div class="pregunta"><div class="q">Quin entrenament has fet?</div>' +
+    '<div class="tipus-sessio" id="tipus-sessio">' +
+      tipus.map((t) =>
+        '<button type="button" class="tipus" data-valor="' + esc(t.nom) + '" data-minuts="' + t.minuts + '"' +
+        ' aria-pressed="' + (t.nom === triat) + '">' +
+          '<span class="nom">' + esc(t.nom) + '</span>' +
+          '<span class="min">' + t.minuts + ' min</span>' +
+        '</button>').join('') +
+    '</div></div>';
+}
 
 function pintaDespres() {
   $('#titol').textContent = 'Després';
   const previ = registreDe(avuiISO(), 'despres');
-  const minuts = previ && previ.minuts ? previ.minuts : (roster.minuts_defecte || 90);
 
   $('#contingut').innerHTML =
     '<div class="card">' +
-      '<div class="pregunta" style="margin-bottom:0">' +
-        '<div class="q">Com de dura ha estat la sessió?</div>' +
-        blocNumeros('duresa', 0, 10, '0 repòs · 5 moderada', '10 màxima') +
-      '</div>' +
+      blocTipusSessio(previ ? previ.tipus_sessio : '') +
+      blocEscala('duresa', 'Com de dura ha estat?', ESC_DURESA) +
     '</div>' +
-    '<div class="card"><div class="camp" style="margin:0">' +
-      '<label for="minuts">Minuts entrenats</label>' +
-      '<input id="minuts" type="number" inputmode="numeric" min="0" max="300" value="' + esc(minuts) + '">' +
-    '</div></div>' +
-    '<div class="card"><div class="camp" style="margin:0">' +
-      '<label for="comentari">Vols afegir alguna cosa? (opcional)</label>' +
-      '<textarea id="comentari"></textarea>' +
-    '</div></div>' +
+    blocComentari('Vols afegir alguna cosa? (opcional)') +
     '<button class="btn" id="desa">' + (previ ? 'Actualitzar' : 'Enviar') + '</button>' +
     (previ ? '<p class="meta" style="text-align:center;margin-top:9px">Avui ja has contestat: si envies, s\'actualitza.</p>' : '');
 
-  enganxaUnicaTria('[data-numeros="duresa"]');
+  enganxaUnicaTria('#tipus-sessio');
+  enganxaUnicaTria('[data-escala="duresa"]');
+
   if (previ) {
-    const b = $('[data-numeros="duresa"] button[data-valor="' + previ.duresa + '"]');
+    const b = $('[data-escala="duresa"] button[data-valor="' + previ.duresa + '"]');
     if (b) b.setAttribute('aria-pressed', 'true');
     if (previ.comentari) $('#comentari').value = previ.comentari;
   }
 
   $('#desa').addEventListener('click', () => {
-    const duresa = triat('[data-numeros="duresa"]');
-    const min = Number($('#minuts').value);
+    const botoTipus = $('#tipus-sessio button[aria-pressed="true"]');
+    const duresa = triat('[data-escala="duresa"]');
+    if (!botoTipus) { avisa('Tria quin entrenament has fet', true); return; }
     if (duresa === null) { avisa('Digues com de dura ha estat', true); return; }
-    if (!min || min < 0) { avisa('Posa els minuts entrenats', true); return; }
 
+    const minuts = Number(botoTipus.getAttribute('data-minuts'));
     encua({
-      id: uuid(),
-      id_jugadora: jo.id,
-      data: avuiISO(),
-      moment: 'despres',
-      duresa: duresa,
-      minuts: min,
-      // La càrrega bona és la que calcula el full; aquesta és per al resum
-      // d'aquest mòbil mentre el registre encara està a la cua.
-      carrega: duresa * min,
+      id: uuid(), data: avuiISO(), moment: 'despres',
+      duresa: duresa,                      // ja en escala 0-10
+      tipus_sessio: botoTipus.getAttribute('data-valor'),
+      minuts: minuts,
+      carrega: duresa * minuts,            // el bo el calcula el full
       comentari: $('#comentari').value.trim(),
       timestamp: new Date().toISOString()
     });
@@ -660,7 +703,64 @@ function pintaDespres() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   11. EL MEU RESUM  (només dades d'aquest mòbil)
+   12. DIA DE PARTIT
+   ───────────────────────────────────────────────────────────────────── */
+
+function pintaPartit() {
+  $('#titol').textContent = 'Partit';
+  const previ = registreDe(avuiISO(), 'partit');
+  zonaTriada = '';
+
+  $('#contingut').innerHTML =
+    '<div class="card">' +
+      blocEscala('valoracio', 'Com ha anat el partit?', ESC_COM_HA_ANAT) +
+      blocEscala('duresa', 'Com de dur ha estat?', ESC_DURESA) +
+      htmlMolestia() +
+    '</div>' +
+    blocComentari('Com ha anat? (opcional)') +
+    '<button class="btn" id="desa">' + (previ ? 'Actualitzar' : 'Enviar') + '</button>' +
+    '<p class="meta" style="text-align:center;margin-top:9px">' +
+      (previ ? 'Avui ja has contestat: si envies, s\'actualitza.'
+             : 'Els minuts que has jugat els posa el teu entrenador.') + '</p>';
+
+  enganxaUnicaTria('[data-escala="valoracio"]');
+  enganxaUnicaTria('[data-escala="duresa"]');
+  enganxaMolestia();
+
+  if (previ) {
+    const marca = (sel, valor) => {
+      const b = $(sel + ' button[data-valor="' + valor + '"]');
+      if (b) b.setAttribute('aria-pressed', 'true');
+    };
+    if (previ.valoracio) marca('[data-escala="valoracio"]', previ.valoracio);
+    if (previ.duresa) marca('[data-escala="duresa"]', previ.duresa);
+    reomplMolestia(previ);
+    if (previ.comentari) $('#comentari').value = previ.comentari;
+  }
+
+  $('#desa').addEventListener('click', () => {
+    const valoracio = triat('[data-escala="valoracio"]');
+    const duresa = triat('[data-escala="duresa"]');
+    const mol = dadesMolestia();
+    if (!valoracio) { avisa('Digues com ha anat el partit', true); return; }
+    if (duresa === null) { avisa('Digues com de dur ha estat', true); return; }
+    if (!mol.contestada) { avisa('Digues si tens alguna molèstia', true); return; }
+
+    encua(Object.assign({
+      id: uuid(), data: avuiISO(), moment: 'partit',
+      valoracio: valoracio,
+      duresa: duresa,
+      comentari: $('#comentari').value.trim(),
+      timestamp: new Date().toISOString()
+    }, mol));
+    zonaTriada = '';
+    avisa('Rebut. Bon descans!');
+    ves('#/inici');
+  });
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   13. EL MEU RESUM  (només dades d'aquest mòbil)
    ───────────────────────────────────────────────────────────────────── */
 
 function carregaSetmana(dilluns) {
@@ -730,54 +830,15 @@ function pintaResum() {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   12. COS TÈCNIC
+   14. COS TÈCNIC
    ───────────────────────────────────────────────────────────────────── */
-
-function pintaStaffPin() {
-  $('#titol').textContent = 'Cos tècnic';
-  $('#contingut').innerHTML =
-    '<div class="card">' +
-      '<div class="eyebrow">Accés del cos tècnic</div>' +
-      '<div class="camp"><label for="pin">PIN</label>' +
-        '<input id="pin" type="password" inputmode="numeric" maxlength="6" placeholder="····"></div>' +
-      '<p class="meta" id="pin-error" style="color:var(--pink); min-height:20px"></p>' +
-      '<button class="btn" id="entra">Entrar</button>' +
-    '</div>' +
-    '<button class="btn secundari" id="torna">Torno a l\'app de jugadora</button>';
-
-  $('#torna').addEventListener('click', () => ves(jo ? '#/inici' : ''));
-  // Si el mobil ja el sap, nomes cal prémer Entrar.
-  if (staff.pin) $('#pin').value = staff.pin;
-  $('#entra').addEventListener('click', async () => {
-    const pin = $('#pin').value.trim();
-    if (!pin) return;
-    $('#entra').disabled = true;
-    $('#entra').textContent = 'Comprovant…';
-    staff.pin = pin;
-    equipPanell = '';
-    try {
-      await demanaPanell(dillunsDe(avuiISO()));
-      guarda(CLAUS.staff, staff);
-      ves('#/panell');
-    } catch (e) {
-      staff.pin = '';
-      $('#pin-error').textContent = String(e && e.message) === 'PIN'
-        ? 'PIN incorrecte.'
-        : 'El full no ha contestat (' + String(e && e.message ? e.message : e) + '). Torna-ho a provar.';
-    } finally {
-      $('#entra').disabled = false;
-      $('#entra').textContent = 'Entrar';
-    }
-  });
-  if (!jo) $('#enrere').classList.add('amagat');
-}
 
 let panell = null;
 let setmanaPanell = '';
 let panellDeCache = false;
 
 async function demanaPanell(dilluns) {
-  const res = await api('getPanell', { pin_staff: staff.pin, equip: equipTriat, setmana: dilluns }, 3);
+  const res = await api('getPanell', { equip: equipTriat, setmana: dilluns }, 3);
   if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
   panell = res.data;
   setmanaPanell = dilluns;
@@ -855,7 +916,7 @@ function colorCarrega(v, max) {
 }
 
 function pintaPanell() {
-  if (!staff.pin) { ves('#/staff'); return; }
+  if (!esStaff()) { ves('#/inici'); return; }
   $('#titol').textContent = 'Panell';
 
   if (!panell) {
@@ -870,19 +931,19 @@ function pintaPanell() {
       setmanaPanell = quina;
       panellDeCache = true;
       pintaPanell();
-      demanaPanell(quina).then(() => pintaPanell()).catch(() => { panellDeCache = true; });
+      demanaPanell(quina)
+        .then(() => { if (rutaActual().vista === 'panell') pintaPanell(); })
+        .catch(() => { panellDeCache = true; });
       return;
     }
 
     $('#contingut').innerHTML = '<p class="buit">Carregant…<br><span class="meta">El full sol trigar uns segons.</span></p>';
     demanaPanell(quina)
-      .then(() => pintaPanell())
+      .then(() => { if (rutaActual().vista === 'panell') pintaPanell(); })
       .catch((e) => {
-        if (String(e && e.message) === 'PIN') {
-          // El PIN ja no val: millor tornar a demanar-lo que deixar-lo encallat.
-          staff.pin = '';
-          localStorage.removeItem(CLAUS.staff);
-          ves('#/staff');
+        if (String(e && e.message) === 'CODI') {
+          // El codi ja no val: millor tornar a demanar-lo que deixar-ho encallat.
+          surtDeTot();
           return;
         }
         $('#contingut').innerHTML = '<p class="buit">No s&#39;ha pogut carregar: ' +
@@ -1033,15 +1094,11 @@ function pintaPanell() {
     '<div class="card"><div class="eyebrow">Alertes actives</div>' + blocAlertes + '</div>' +
     blocMolesties +
 
+    // Qui no ha contestat segueix sent útil; el percentatge no, que ja es
+    // veu a la graella de sota.
     '<div class="card">' +
-      '<div class="eyebrow">Compliment' + (equipPanell ? ' · ' + esc(equipPanell) : '') + '</div>' +
-      '<div style="font-size:25px; font-weight:800">' + (c.percentatge === null ? '—' : c.percentatge + '%') + '</div>' +
-      '<div class="barra-compliment"><i style="width:' + (c.percentatge || 0) + '%"></i></div>' +
-      '<p class="meta" style="margin:0">' + (visibles.length
-        ? c.rebuts + ' de ' + c.esperats + ' respostes esperades · ' +
-          visibles.length + (visibles.length === 1 ? ' jugadora' : ' jugadores')
-        : 'Cap jugadora en aquesta vista.') + '</p>' +
-      '<p class="meta" style="margin:6px 0 0">Dies comptats: ' +
+      '<div class="eyebrow">Qui falta' + (equipPanell ? ' · ' + esc(equipPanell) : '') + '</div>' +
+      '<p class="meta" style="margin:0">Dies comptats: ' +
         (diesEsperats.length
           ? diesEsperats.map((d) => esc(diaCurt(d)) + ' ' + esc(d.slice(8, 10))).join(', ')
           : 'cap encara') + '.</p>' +
@@ -1049,7 +1106,12 @@ function pintaPanell() {
         ? '<p class="meta" style="margin:8px 0 0"><b>Sense cap resposta aquests dies:</b><br>' + esc(c.sense.join(', ')) + '</p>'
         : (visibles.length
             ? '<p class="meta" style="margin:8px 0 0">Totes han contestat algun dia.</p>'
-            : '')) +
+            : '<p class="meta" style="margin:8px 0 0">Cap jugadora en aquesta vista.</p>')) +
+    '</div>' +
+
+    '<div class="accions-staff">' +
+      '<button type="button" class="btn secundari" id="ves-partit">🏀 Dia de partit</button>' +
+      '<button type="button" class="btn secundari" id="ves-entreno">🏋️ Dia d&#39;entrenament</button>' +
     '</div>' +
 
     '<div class="card">' +
@@ -1081,6 +1143,9 @@ function pintaPanell() {
       boto.classList.add('amagat');
     });
   });
+
+  $('#ves-partit').addEventListener('click', () => ves('#/partit-staff'));
+  $('#ves-entreno').addEventListener('click', () => ves('#/entreno-staff'));
 
   $$('#contingut [data-equip]').forEach((b) => b.addEventListener('click', () => {
     equipPanell = b.getAttribute('data-equip');
@@ -1124,24 +1189,227 @@ function pintaPanell() {
   $('#setm-seg').addEventListener('click', () => vesSetmana(7));
   $$('#contingut [data-fitxa]').forEach((b) =>
     b.addEventListener('click', () => ves('#/fitxa/' + b.getAttribute('data-fitxa'))));
-  $('#surt-staff').addEventListener('click', () => {
-    staff.pin = '';
-    panell = null;
-    equipPanell = '';
-    localStorage.removeItem(CLAUS.staff);
-    localStorage.removeItem(CLAUS.panell);   // son dades de salut: no es queden al mobil
-    ves(jo ? '#/inici' : '');
-    if (!jo) pintaQui();
+  $('#surt-staff').addEventListener('click', surtDeTot);
+}
+
+/* ─────────────────────────────────────────────────────────────────────
+   14b. EL QUE ESCRIU L'ENTRENADOR
+   ───────────────────────────────────────────────────────────────────── */
+
+/** Equips sobre els quals pot escriure qui ha entrat. */
+function elsMeusEquips() {
+  const seus = (sessio.usuari && sessio.usuari.equips) || [];
+  if (seus.length) return seus;
+  return panell ? equipsDelPanell() : [];
+}
+
+function blocDataIEquip(equips, equipActiu, data) {
+  return '<div class="card">' +
+    '<div class="camp"><label for="data-sessio">Dia</label>' +
+      '<input id="data-sessio" type="date" value="' + esc(data) + '"></div>' +
+    (equips.length > 1
+      ? '<div class="camp" style="margin:0"><label>Equip</label><div class="multi" id="equip-sessio">' +
+        equips.map((e) => '<button type="button" class="chip" data-valor="' + esc(e) + '"' +
+          ' aria-pressed="' + (e === equipActiu) + '">' + esc(e) + '</button>').join('') +
+        '</div></div>'
+      : '<input type="hidden" id="equip-unic" value="' + esc(equips[0] || '') + '">') +
+  '</div>';
+}
+
+function equipTriatALaPantalla() {
+  const b = $('#equip-sessio button[aria-pressed="true"]');
+  if (b) return b.getAttribute('data-valor');
+  const u = $('#equip-unic');
+  return u ? u.value : '';
+}
+
+/* ---- Dia de partit: minuts per jugadora ---- */
+
+let partitStaff = null;     // el que ha tornat getPartit
+
+function pintaPartitStaff() {
+  if (!esStaff()) { ves('#/inici'); return; }
+  $('#titol').textContent = 'Dia de partit';
+
+  const equips = elsMeusEquips();
+  if (!equips.length) {
+    $('#contingut').innerHTML = '<p class="buit">No tens cap equip assignat.</p>';
+    return;
+  }
+  const equip = equipPanell && equips.indexOf(equipPanell) !== -1 ? equipPanell : equips[0];
+  const data = (partitStaff && partitStaff.data) || avuiISO();
+
+  $('#contingut').innerHTML =
+    blocDataIEquip(equips, equip, data) +
+    '<div id="cos-partit"><p class="buit">Carregant les jugadores…</p></div>';
+
+  $$('#equip-sessio .chip').forEach((b) => b.addEventListener('click', () => {
+    $$('#equip-sessio .chip').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+    b.setAttribute('aria-pressed', 'true');
+    carregaPartit();
+  }));
+  $('#data-sessio').addEventListener('change', carregaPartit);
+  carregaPartit();
+}
+
+async function carregaPartit() {
+  const data = $('#data-sessio').value || avuiISO();
+  const equip = equipTriatALaPantalla();
+  const cos = $('#cos-partit');
+  cos.innerHTML = '<p class="buit">Carregant les jugadores…</p>';
+  try {
+    const res = await api('getPartit', { data: data, equip: equip }, 3);
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
+    partitStaff = res.data;
+    pintaCosPartit();
+  } catch (e) {
+    cos.innerHTML = '<p class="buit">No s&#39;ha pogut carregar: ' +
+      esc(String(e && e.message ? e.message : e)) + '</p>';
+  }
+}
+
+function pintaCosPartit() {
+  const d = partitStaff;
+  const trams = d.llista_trams || [];
+  const sessioPrevia = d.sessio || {};
+
+  $('#cos-partit').innerHTML =
+    '<div class="card">' +
+      blocEscala('valoracio-partit', 'Com ha anat el partit?', ESC_COM_HA_ANAT) +
+    '</div>' +
+    '<div class="card">' +
+      '<div class="eyebrow">Minuts jugats</div>' +
+      (d.jugadores.length
+        ? d.jugadores.map((j) =>
+            '<div class="fila-minuts">' +
+              '<span class="qui">' + (j.dorsal ? '<b>' + esc(j.dorsal) + '</b> ' : '') + esc(j.nom) + '</span>' +
+              '<select data-minuts="' + esc(j.id) + '">' +
+                '<option value="">—</option>' +
+                trams.map((t) => '<option value="' + esc(t.tram) + '"' +
+                  (d.trams[j.id] === t.tram ? ' selected' : '') + '>' + esc(t.tram) + ' min</option>').join('') +
+              '</select>' +
+            '</div>').join('')
+        : '<p class="meta" style="margin:0">Cap jugadora en aquest equip.</p>') +
+      '<p class="meta" style="margin-top:10px">Deixa el guionet a qui no hagi jugat.</p>' +
+    '</div>' +
+    blocComentari('Com ha anat el partit? (opcional)') +
+    '<button class="btn" id="desa-partit">Desar el partit</button>';
+
+  enganxaUnicaTria('[data-escala="valoracio-partit"]');
+  if (sessioPrevia.valoracio) {
+    const b = $('[data-escala="valoracio-partit"] button[data-valor="' + sessioPrevia.valoracio + '"]');
+    if (b) b.setAttribute('aria-pressed', 'true');
+  }
+  if (sessioPrevia.comentari) $('#comentari').value = sessioPrevia.comentari;
+
+  $('#desa-partit').addEventListener('click', desaPartitStaff);
+}
+
+async function desaPartitStaff() {
+  const boto = $('#desa-partit');
+  const data = $('#data-sessio').value || avuiISO();
+  const equip = equipTriatALaPantalla();
+  const valoracio = triat('[data-escala="valoracio-partit"]');
+
+  const minuts = $$('#cos-partit [data-minuts]').map((sel) => ({
+    id_jugadora: sel.getAttribute('data-minuts'),
+    tram: sel.value
+  })).filter((m) => m.tram);
+
+  if (!valoracio && !minuts.length) { avisa('No hi ha res a desar', true); return; }
+
+  boto.disabled = true;
+  boto.textContent = 'Desant…';
+  try {
+    await api('saveSessio', { payload: {
+      data: data, equip: equip, tipus: 'partit',
+      valoracio: valoracio, comentari: $('#comentari').value.trim()
+    } }, 3);
+    await api('saveMinuts', { payload: { data: data, equip: equip, minuts: minuts } }, 3);
+    avisa('Partit desat · ' + minuts.length + (minuts.length === 1 ? ' jugadora' : ' jugadores'));
+    panell = null;                    // la càrrega de la setmana ha canviat
+    localStorage.removeItem(CLAUS.panell);
+    ves('#/panell');
+  } catch (e) {
+    avisa('No s\'ha pogut desar (' + String(e && e.message ? e.message : e) + ')', true);
+  } finally {
+    boto.disabled = false;
+    boto.textContent = 'Desar el partit';
+  }
+}
+
+/* ---- Dia d'entrenament ---- */
+
+function pintaEntrenoStaff() {
+  if (!esStaff()) { ves('#/inici'); return; }
+  $('#titol').textContent = 'Dia d\'entrenament';
+
+  const equips = elsMeusEquips();
+  if (!equips.length) {
+    $('#contingut').innerHTML = '<p class="buit">No tens cap equip assignat.</p>';
+    return;
+  }
+  const equip = equipPanell && equips.indexOf(equipPanell) !== -1 ? equipPanell : equips[0];
+
+  $('#contingut').innerHTML =
+    blocDataIEquip(equips, equip, avuiISO()) +
+    '<div class="card">' +
+      blocEscala('valoracio-entreno', 'Com ha anat l\'entrenament?', ESC_COM_HA_ANAT) +
+      '<div class="pregunta" style="margin-bottom:0">' +
+        '<div class="q">S\'ha complert l\'objectiu?</div>' +
+        '<div class="sino" id="objectiu">' +
+          '<button type="button" data-valor="no" aria-pressed="false">No</button>' +
+          '<button type="button" data-valor="si" aria-pressed="false">Sí</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+    blocComentari('Com ha anat? (opcional)') +
+    '<button class="btn" id="desa-entreno">Desar l\'entrenament</button>';
+
+  $$('#equip-sessio .chip').forEach((b) => b.addEventListener('click', () => {
+    $$('#equip-sessio .chip').forEach((x) => x.setAttribute('aria-pressed', 'false'));
+    b.setAttribute('aria-pressed', 'true');
+  }));
+  enganxaUnicaTria('[data-escala="valoracio-entreno"]');
+  enganxaUnicaTria('#objectiu');
+
+  $('#desa-entreno').addEventListener('click', async () => {
+    const boto = $('#desa-entreno');
+    const valoracio = triat('[data-escala="valoracio-entreno"]');
+    const objBoto = $('#objectiu button[aria-pressed="true"]');
+    if (!valoracio) { avisa('Digues com ha anat l\'entrenament', true); return; }
+
+    boto.disabled = true;
+    boto.textContent = 'Desant…';
+    try {
+      await api('saveSessio', { payload: {
+        data: $('#data-sessio').value || avuiISO(),
+        equip: equipTriatALaPantalla(),
+        tipus: 'entrenament',
+        valoracio: valoracio,
+        objectiu: objBoto ? objBoto.getAttribute('data-valor') === 'si' : '',
+        comentari: $('#comentari').value.trim()
+      } }, 3);
+      avisa('Entrenament desat');
+      ves('#/panell');
+    } catch (e) {
+      avisa('No s\'ha pogut desar (' + String(e && e.message ? e.message : e) + ')', true);
+    } finally {
+      boto.disabled = false;
+      boto.textContent = 'Desar l\'entrenament';
+    }
   });
 }
 
+
 function pintaFitxa(id) {
-  if (!staff.pin) { ves('#/staff'); return; }
+  if (!esStaff()) { ves('#/inici'); return; }
   $('#titol').textContent = 'Fitxa';
   $('#contingut').innerHTML = '<p class="buit">Carregant…</p>';
 
-  api('getJugadora', { pin_staff: staff.pin, id: id, n_setmanes: 8 }, 3).then((res) => {
+  api('getJugadora', { id: id, n_setmanes: 8 }, 3).then((res) => {
     if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
+    if (rutaActual().vista !== 'fitxa') return;   // ja no hi som
     const d = res.data;
     const sostre = Math.max.apply(null, d.setmanes.map((s) => s.carrega).concat([1]));
 
@@ -1183,48 +1451,45 @@ function pintaFitxa(id) {
 }
 
 /* ─────────────────────────────────────────────────────────────────────
-   13. ARRENCADA
+   15. ARRENCADA
    ───────────────────────────────────────────────────────────────────── */
 
 async function arrenca() {
-  jo = llegeix(CLAUS.jo, null);
-  roster = Object.assign(roster, llegeix(CLAUS.roster, {}));
+  sessio = Object.assign(
+    { codi: '', tipus: '', jugadora: null, usuari: null, tipus_sessio: [], trams: [] },
+    llegeix(CLAUS.sessio, {}) || {});
+  jo = sessio.jugadora;
   meus = llegeix(CLAUS.meus, []) || [];
   pendents = llegeix(CLAUS.pendents, []) || [];
-  staff = Object.assign({ pin: '' }, llegeix(CLAUS.staff, {}));
 
+  $('#form-codi').addEventListener('submit', entraAmbCodi);
   $('#enrere').addEventListener('click', () => {
     const r = rutaActual();
-    if (r.vista === 'fitxa') ves('#/panell');
-    else if (['abans', 'despres', 'resum'].indexOf(r.vista) !== -1) ves('#/inici');
+    if (r.vista === 'fitxa' || r.vista === 'partit-staff' || r.vista === 'entreno-staff') ves('#/panell');
+    else if (['abans', 'despres', 'partit', 'resum'].indexOf(r.vista) !== -1) ves('#/inici');
     else if (history.length > 1) history.back();
-    else ves('#/inici');
+    else ves(esStaff() ? '#/panell' : '#/inici');
   });
   $('#estat-sync').addEventListener('click', () => sincronitza(true));
-  $('#qui-staff').addEventListener('click', () => { obreApp(staff.pin ? '#/panell' : '#/staff'); });
   window.addEventListener('hashchange', ruta);
   window.addEventListener('online', () => sincronitza());
   document.addEventListener('visibilitychange', () => {
     if (document.hidden) return;
     sincronitza();
-    // El "fet" de les rajoles es d'avui. Si l'app s'ha quedat oberta tota la
+    // El "fet" de les rajoles és d'avui. Si l'app s'ha quedat oberta tota la
     // nit, en tornar-hi encara mostraria el d'ahir.
     if (jo && rutaActual().vista === 'inici') pintaInici();
   });
 
-  if (!CONFIG.API_URL) $('#qui-error').textContent = 'Falta enganxar la URL de l\'Apps Script a CONFIG.API_URL.';
-
-  const rutaStaff = ['staff', 'panell', 'fitxa'].indexOf(rutaActual().vista) !== -1;
-  if (jo || rutaStaff) {
-    obreApp();
+  if (sessio.codi) {
+    obreApp(esStaff() ? '#/panell' : '#/inici');
     sincronitza();
-    carregaRoster(true);
   } else {
-    pintaQui();                 // amb el que hi hagi desat, perquè es vegi de seguida
-    await carregaRoster(false);
-    // La llista pot trigar 10 segons: si mentrestant ha entrat al panell,
-    // no se l'ha de fer fora.
-    if (!jo && soAlSelectorDeNoms()) pintaQui();
+    pintaEntrada();
+  }
+
+  if (!CONFIG.API_URL) {
+    $('#codi-error').textContent = 'Falta enganxar la URL de l&#39;Apps Script a CONFIG.API_URL.';
   }
 
   if ('serviceWorker' in navigator) {
