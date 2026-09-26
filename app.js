@@ -55,6 +55,10 @@ const ESC_DURESA = [
   { v: 8,  e: '😓', l: 'Dura' },
   { v: 10, e: '🥵', l: 'Molt dura' }
 ];
+/* Mateixos valors, pero parlant del partit: "com de dur ha estat el partit". */
+const ESC_DURESA_PARTIT = ESC_DURESA.map(function (o) {
+  return { v: o.v, e: o.e, l: o.l === 'Dura' ? 'Dur' : (o.l === 'Molt dura' ? 'Molt dur' : o.l) };
+});
 const ESC_COM_HA_ANAT = [
   { v: 1, e: '😞', l: 'Molt malament' },
   { v: 2, e: '😕', l: 'Malament' },
@@ -725,14 +729,14 @@ function pintaPartit() {
   $('#contingut').innerHTML =
     '<div class="card">' +
       blocEscala('valoracio', 'Com ha anat el partit?', ESC_COM_HA_ANAT) +
-      blocEscala('duresa', 'Com de dur ha estat?', ESC_DURESA) +
+      blocEscala('duresa', 'Com de dur ha estat?', ESC_DURESA_PARTIT) +
       htmlMolestia() +
     '</div>' +
     blocComentari('Com ha anat? (opcional)') +
     '<button class="btn" id="desa">' + (previ ? 'Actualitzar' : 'Enviar') + '</button>' +
     '<p class="meta" style="text-align:center;margin-top:9px">' +
       (previ ? 'Avui ja has contestat: si envies, s\'actualitza.'
-             : 'Els minuts que has jugat els posa el teu entrenador.') + '</p>';
+             : 'Els minuts que has jugat els posa el teu entrenador/a.') + '</p>';
 
   enganxaUnicaTria('[data-escala="valoracio"]');
   enganxaUnicaTria('[data-escala="duresa"]');
