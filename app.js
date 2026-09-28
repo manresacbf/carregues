@@ -815,6 +815,11 @@ function pintaResum() {
   }
   const sostre = Math.max.apply(null, setmanes.map((s) => s.total).concat([1]));
 
+  // Un 0,13 no el llegeix ningu: cal dir-ho amb paraules. I si la setmana
+  // encara corre, el numero es baix per forca i no vol dir res.
+  const percentatge = ratio === null ? null : Math.round(ratio * 100);
+  const diumenge = new Date(avuiISO() + 'T12:00:00').getDay() === 0;
+
   const delaSetmana = meus.filter((r) => r.moment === 'abans' && r.data >= dilluns && r.data <= sumaDies(dilluns, 6));
   const mitjana = (camp) => {
     const v = delaSetmana.map((r) => Number(r[camp])).filter((n) => n >= 1 && n <= 5);
@@ -832,6 +837,16 @@ function pintaResum() {
       '<div class="xifra"><div class="k">Son (mitjana)</div><div class="v">' + mitjana('son') + '</div><div class="u">sobre 5</div></div>' +
       '<div class="xifra"><div class="k">Cansament (mitjana)</div><div class="v">' + mitjana('fatiga') + '</div><div class="u">sobre 5</div></div>' +
     '</div>' +
+
+    (percentatge === null
+      ? '<p class="meta" style="text-align:center; margin:12px 0 0">' +
+          'Encara no tens tres setmanes de referència: la comparació sortirà quan n&#39;hi hagi.' +
+        '</p>'
+      : '<p class="meta" style="text-align:center; margin:12px 0 0">' +
+          'Aquesta setmana portes el <b>' + percentatge + '%</b> del que sols fer.' +
+          (diumenge ? '' : ' La setmana encara no s&#39;ha acabat: aquest número puja ' +
+                            'cada cop que envies una sessió.') +
+        '</p>') +
 
     '<div class="card">' +
       '<div class="eyebrow">Les teves últimes 6 setmanes</div>' +
