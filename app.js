@@ -1128,13 +1128,13 @@ function pintaPanell() {
             : '<p class="meta" style="margin:8px 0 0">Cap jugadora en aquesta vista.</p>')) +
     '</div>' +
 
-    // El director no entra dades de cap equip: les entra qui hi és a la pista.
+    // El director no entra dades de cap equip — les entra qui hi és a la pista —
+    // i el resum de partits és només seu.
     '<div class="accions-staff">' +
       (esDirector()
-        ? ''
+        ? '<button type="button" class="btn secundari" id="ves-resum">📊 Resum de partits</button>'
         : '<button type="button" class="btn secundari" id="ves-partit">🏀 Dia de partit</button>' +
           '<button type="button" class="btn secundari" id="ves-entreno">🏋️ Dia d&#39;entrenament</button>') +
-      '<button type="button" class="btn secundari" id="ves-resum">📊 Resum de partits</button>' +
     '</div>' +
 
     '<div class="card">' +
@@ -1171,7 +1171,7 @@ function pintaPanell() {
 
   if ($('#ves-partit')) $('#ves-partit').addEventListener('click', () => ves('#/partit-staff'));
   if ($('#ves-entreno')) $('#ves-entreno').addEventListener('click', () => ves('#/entreno-staff'));
-  $('#ves-resum').addEventListener('click', () => { resum = null; ves('#/resum-partits'); });
+  if ($('#ves-resum')) $('#ves-resum').addEventListener('click', () => { resum = null; ves('#/resum-partits'); });
 
   $$('#contingut [data-equip]').forEach((b) => b.addEventListener('click', () => {
     equipPanell = b.getAttribute('data-equip');
@@ -1504,6 +1504,7 @@ function caraDe(v) {
 
 function pintaResumPartits() {
   if (!esStaff()) { ves('#/inici'); return; }
+  if (!esDirector()) { ves('#/panell'); return; }
   $('#titol').textContent = 'Resum de partits';
 
   if (!resum) {

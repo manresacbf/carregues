@@ -1257,6 +1257,11 @@ function sync_(operacions, codi) {
  * aquesta pantalla pot abastar tot el club sense la lentitud del panell.
  */
 function getResumPartits_(equip, n, usuari) {
+  /* Nomes la direccio tecnica. Amagar el boto al mobil no serveix de res:
+     qualsevol amb un codi d'staff podria demanar-ho igualment. */
+  if (!usuari || usuari.rol !== 'director') {
+    return json_({ ok: false, error: "Aquest resum es nomes per a la direccio tecnica." });
+  }
   var quants = Math.min(Math.max(num_(n) || 8, 1), 20);
   var permesos = equipsPermesos_(usuari);
   if (equip && permesos && permesos.indexOf(equip) === -1) {

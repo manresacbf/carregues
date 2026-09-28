@@ -162,8 +162,10 @@ d'aquell partit, i a sota una llista de minuts totals ordenada de més a
 menys. Serveix per veure d'una ullada com es reparteixen els minuts i qui
 es va quedant fora.
 
-Hi entren tots dos: el director la veu de tots els equips i l'entrenador/a
-només dels seus, amb el mateix filtratge de servidor que el panell.
+**Només hi entra el director tècnic**, i el full ho comprova: amagar el botó
+al mòbil no serviria de res, perquè qualsevol amb un codi d'staff podria
+demanar-ho igualment. Els entrenadors/es tenen al seu lloc els dos botons
+d'introduir dades.
 
 **No hi ha ni rival ni resultat, i és a posta.** Això va de repartiment de
 minuts, no de classificació. Si algú ho demana, calen dues columnes noves a
