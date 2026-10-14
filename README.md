@@ -127,10 +127,11 @@ Dues coses a tenir presents:
 
 - **A la graella no es distingeix amb quin equip va entrenar cada dia.** La
   càrrega hi suma bé; d'on venia, no hi consta.
-- **Si els dos equips juguen el mateix dia**, la fila de minuts és una per
-  jugadora i dia: els minuts que desi el segon entrenador substituiran els del
-  primer. A la pràctica no pot jugar dos partits el mateix dia, però si passés,
-  val més saber-ho.
+- **Si els dos equips juguen el mateix dia**, cada entrenador desa els seus
+  minuts sense trepitjar els de l'altre: la fila de `Minuts` va per data, equip
+  i jugadora. Els minuts del dia són la **suma** dels dos partits, i la càrrega
+  es calcula amb aquesta suma. Ella només valora una vegada com de dur ha
+  estat el dia, perquè el seu registre de `partit` és un per dia.
 
 ## Qui veu què
 

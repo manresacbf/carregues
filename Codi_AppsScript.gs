@@ -582,7 +582,11 @@ function desaMinuts_(p, usuari) {
       timestamp: new Date().toISOString()
     };
     var valors = caps.map(function (c) { return fila[c] === undefined ? '' : fila[c]; });
-    var nFila = trobaPerClaus_(sh, caps, [['data', data], ['id_jugadora', idJ]]);
+    // La clau porta l'equip: una jugadora de dos equips pot jugar dos partits
+    // el mateix dia i cada entrenador ha de poder desar els seus minuts sense
+    // esborrar els de l'altre.
+    var nFila = trobaPerClaus_(sh, caps,
+      [['data', data], ['equip', equip], ['id_jugadora', idJ]]);
     if (nFila) sh.getRange(nFila, 1, 1, caps.length).setValues([valors]);
     else sh.getRange(sh.getLastRow() + 1, 1, 1, caps.length).setValues([valors]);
     escrites++;
@@ -602,9 +606,14 @@ function recalculaCarregaPartit_(data) {
       iMinuts = caps.indexOf('minuts'), iCarrega = caps.indexOf('carrega');
   if ([iData, iMoment, iJug, iDuresa, iMinuts, iCarrega].indexOf(-1) !== -1) return 0;
 
+  // Suma, no l'ultim que trobi: pot haver jugat amb dos equips el mateix dia.
   var minutsPerJug = {};
   files_('minuts').forEach(function (m) {
-    if (dataISO_(m.data) === data) minutsPerJug[text_(m.id_jugadora)] = num_(m.minuts);
+    if (dataISO_(m.data) !== data) return;
+    var n = num_(m.minuts);
+    if (n === '') return;
+    var idJ = text_(m.id_jugadora);
+    minutsPerJug[idJ] = (minutsPerJug[idJ] || 0) + n;
   });
 
   var rang = sh.getRange(2, 1, sh.getLastRow() - 1, caps.length);
@@ -841,13 +850,18 @@ function desaRegistre_(p, codi) {
 
 /** Minuts que ha jugat una jugadora un dia, si l'entrenador ja els ha posat. */
 function minutsJugatsDe_(idJ, data) {
-  var trobat = '';
+  var total = '';
   try {
     files_('minuts').forEach(function (m) {
-      if (text_(m.id_jugadora) === idJ && dataISO_(m.data) === data) trobat = num_(m.minuts);
+      if (text_(m.id_jugadora) !== idJ || dataISO_(m.data) !== data) return;
+      var n = num_(m.minuts);
+      if (n === '') return;
+      // Si ha jugat amb dos equips el mateix dia, els minuts se sumen: la
+      // duresa que ha posat ella es la del dia sencer.
+      total = (total === '' ? 0 : total) + n;
     });
   } catch (err) { /* encara sense pestanya */ }
-  return trobat;
+  return total;
 }
 
 /* Files que es miren de cop abans de plantejar-se llegir el full sencer.
@@ -1449,10 +1463,14 @@ function getPartit_(data, equip, usuari) {
     return { id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip };
   });
 
+  // Nomes els d'aquest equip: si no, a l'entrenador del U16 li sortirien ja
+  // posats els minuts que hagues desat el del U17.
   var trams = {};
   try {
     files_('minuts').forEach(function (m) {
-      if (dataISO_(m.data) === data) trams[text_(m.id_jugadora)] = text_(m.tram);
+      if (dataISO_(m.data) === data && text_(m.equip) === equip) {
+        trams[text_(m.id_jugadora)] = text_(m.tram);
+      }
     });
   } catch (err) { /* encara sense pestanya */ }
 
