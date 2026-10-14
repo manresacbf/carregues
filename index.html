@@ -107,9 +107,11 @@
   .fila-jug .nom{font-size:18px; font-weight:700;}
 
   /* El camp del codi */
+  /* Els codis son lletres i numeros ("as2u13"), no quatre xifres: amb
+     l'espaiat d'abans no es llegien, i el mobil hi posava majuscula sola. */
   .pin-camp{
     width:100%; min-height:64px; text-align:center;
-    font-size:26px; letter-spacing:.35em; font-weight:700;
+    font-size:26px; letter-spacing:.1em; font-weight:700; text-transform:lowercase;
     background:var(--bg-raised); border:1px solid var(--line);
     border-radius:14px; margin-bottom:6px; color:var(--text);
   }
@@ -314,9 +316,9 @@
   <p class="meta" style="text-align:center; margin:0 0 22px">Equips de rendiment</p>
 
   <form id="form-codi" autocomplete="off">
-    <input id="codi" class="pin-camp" type="text" inputmode="numeric" pattern="[0-9]*"
-           maxlength="8" placeholder="codi" aria-label="El teu codi"
-           autocomplete="off" autocorrect="off" spellcheck="false">
+    <input id="codi" class="pin-camp" type="text" placeholder="codi" aria-label="El teu codi"
+           autocomplete="off" autocorrect="off" spellcheck="false"
+           autocapitalize="none">
     <p class="error meta" id="codi-error" style="color:var(--pink); text-align:center; min-height:20px"></p>
     <button class="btn" type="submit" id="codi-entra">Entrar</button>
   </form>

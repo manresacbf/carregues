@@ -88,9 +88,25 @@ i el full decideix què obre:
 | Entrenador | columna `pin` de `Usuaris` | el panell del seu equip |
 | Director | columna `pin` de `Usuaris`, rol `director` | el panell de tots els equips |
 
+Els codis són **lletres i números en minúscula** amb el format inicial del nom
++ inicial del cognom + equip, i un número al mig per desfer empats:
+`cbu13`, `as2u13`. Es comparen **sense distingir majúscules**, així que tant hi
+fa com els escrigui ella o com estiguin escrits al full.
+
 `setup()` genera els codis que falten, de 4 xifres, i no en repeteix cap: ni
 entre jugadores ni amb els de l'staff. Per canviar-ne un, escriu-lo a mà a la
 casella; per treure l'accés a algú, esborra'l.
+
+**`setup()` avisa si hi ha codis repetits.** Com que ara els escrius tu seguint
+un patró, xocar és fàcil: dues «Clara B.» del mateix equip donen el mateix codi.
+Dos codis iguals voldrien dir que una jugadora entra com una altra i al full no
+es veuria. Si en troba, surt una finestra amb la llista — i queda també al
+registre d'execucions.
+
+**Si canvies el codi d'algú que ja té l'app oberta**, el mòbil continua enviant
+el vell fins que el full el rebutja. Quan això passa, l'app tanca la sessió i
+demana el codi nou; el que tingués pendent es queda desat i s'envia sol quan
+torni a entrar. El seu resum no es perd.
 
 **Escriure demana el codi de qui escriu.** El full no es fia de l'identificador
 que li arriba: mira de qui és el codi i desa el registre a aquella jugadora.

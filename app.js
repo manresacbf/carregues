@@ -279,6 +279,9 @@ async function sincronitza(manual) {
 
     const perId = {};
     ((res.data && res.data.resultats) || []).forEach((r) => { perId[r.opId] = r; });
+
+    // Si el full rebutja el codi, reintentar-ho no arreglara res.
+    if (Object.keys(perId).some((k) => perId[k].error === 'CODI')) { codiCaducat(); return; }
     pendents = pendents.filter((o) => {
       const r = perId[o.opId];
       if (!r) return true;
@@ -322,7 +325,8 @@ function pintaEntrada(missatge) {
 
 async function entraAmbCodi(ev) {
   if (ev) ev.preventDefault();
-  const codi = $('#codi').value.trim();
+  // Els codis van en minuscula: que escrigui com vulgui.
+  const codi = $('#codi').value.trim().toLowerCase();
   const boto = $('#codi-entra');
   const err = $('#codi-error');
 
@@ -357,6 +361,9 @@ async function entraAmbCodi(ev) {
     jo = sessio.jugadora;
     guardaSessio();
     obreApp(esStaff() ? '#/panell' : '#/inici');
+    // Si havia quedat res encallat perquè li havien canviat el codi, ara ja
+    // es pot enviar: no esperem que torni a omplir un formulari.
+    sincronitza();
   } catch (e) {
     sessio.codi = anterior;
     const motiu = String(e && e.message ? e.message : e);
@@ -370,6 +377,25 @@ async function entraAmbCodi(ev) {
 }
 
 /** Tanca la sessió d'aquest mòbil i esborra el que hi havia desat. */
+/**
+ * El full diu que aquest codi ja no es de ningu. Passa quan es canvien els
+ * codis i el mobil encara envia el vell: sense aixo, la jugadora omplia el
+ * formulari, veia "Rebut" i el registre es quedava encallat a la cua per
+ * sempre sense que ningu se n'assabentes.
+ *
+ * No fem surtDeTot(): el seu resum es calcula amb el que ha enviat aquest
+ * aparell i no te cap culpa que li hagin canviat el codi. La cua tambe es
+ * queda, i s'envia sola quan torni a entrar.
+ */
+function codiCaducat() {
+  if (!sessio.codi) return;
+  sessio.codi = '';
+  guardaSessio();
+  localStorage.removeItem(CLAUS.panell);
+  panell = null;
+  pintaEntrada('El teu codi ha canviat. Demana el nou al cos tècnic.');
+}
+
 function surtDeTot() {
   sessio = { codi: '', tipus: '', jugadora: null, usuari: null, tipus_sessio: [], trams: [] };
   jo = null;

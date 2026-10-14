@@ -173,9 +173,31 @@ function setup() {
 
   var noms = omplirNomsJugadores_();
   var codis = generaCodis_();
+  var repetits = codisRepetits_();
+
   ss.toast('Pestanyes preparades' + (noms ? ' · ' + noms + ' noms omplerts' : '') +
            (codis ? ' · ' + codis + ' codis de jugadora generats' : '') +
+           (repetits.length ? ' · ATENCIO: ' + repetits.length + ' codis repetits' : '') +
            '. Omple Jugadores i Usuaris.', 'Rendiment MCBF', 10);
+
+  /* El toast se'n va sol i aixo no es pot passar per alt: dos codis iguals
+     voldrien dir que una persona entra com una altra. */
+  if (repetits.length) {
+    var avis = 'Hi ha ' + repetits.length +
+      (repetits.length === 1 ? ' codi repetit:' : ' codis repetits:') +
+      '\n\n' + repetits.join('\n') +
+      '\n\nMentre siguin iguals, qui entri amb aquest codi entrara com la primera ' +
+      'de la llista. Canvia\'ls a la columna "codi" de Jugadores, o al "pin" ' +
+      'd\'Usuaris.';
+    Logger.log(avis);
+    try {
+      var ui = SpreadsheetApp.getUi();
+      ui.alert('Rendiment MCBF', avis, ui.ButtonSet.OK);
+    } catch (err) {
+      /* Segons d'on s'executi setup() no hi ha finestra on ensenyar-ho; al
+         registre d'execucions hi es igualment. */
+    }
+  }
 }
 
 /**
@@ -239,6 +261,11 @@ function json_(o) {
 }
 
 function text_(v) { return String(v === undefined || v === null ? '' : v).trim(); }
+
+/* Els codis son lletres i numeros en minuscula ("as2u13"). Es comparen
+   sempre passats per aqui: si al full hi ha "CBU13" i ella escriu "cbu13",
+   ha d'entrar igual. */
+function clauCodi_(v) { return text_(v).toLowerCase(); }
 
 function num_(v) {
   if (v === '' || v === null || v === undefined) return '';
@@ -322,11 +349,11 @@ function entrar_(codi) {
     return json_({ ok: false, error: 'Massa intents. Torna-ho a provar en uns minuts.' });
   }
 
-  codi = text_(codi);
+  codi = clauCodi_(codi);
   var trobat = null;
 
   if (codi) {
-    var jug = jugadores_('', true).filter(function (j) { return j.codi === codi; })[0];
+    var jug = jugadores_('', true).filter(function (j) { return clauCodi_(j.codi) === codi; })[0];
     if (jug) {
       trobat = {
         tipus: 'jugadora',
@@ -365,7 +392,7 @@ function usuariPerCodi_(codi) {
   var usuaris = [];
   try { usuaris = files_('usuaris'); } catch (err) { usuaris = []; }
   usuaris.forEach(function (u) {
-    if (trobat || text_(u.pin) !== codi) return;
+    if (trobat || clauCodi_(u.pin) !== clauCodi_(codi)) return;
     var rol = text_(u.rol).toLowerCase();
     var esEntrenador = rol.indexOf('entrenador') === 0;
     trobat = {
@@ -376,7 +403,7 @@ function usuariPerCodi_(codi) {
   });
   // El pin_staff de Config segueix valent com a director mentre Usuaris
   // estigui buida, per no deixar ningu fora.
-  if (!trobat && codi === text_(configuracio_().pin_staff)) {
+  if (!trobat && clauCodi_(codi) === clauCodi_(configuracio_().pin_staff)) {
     trobat = { nom: 'Cos tecnic', rol: 'director', equips: [] };
   }
   return trobat;
@@ -384,9 +411,9 @@ function usuariPerCodi_(codi) {
 
 /** La jugadora que te aquest codi, o null. Qualsevol escriptura hi passa. */
 function jugadoraPerCodi_(codi) {
-  codi = text_(codi);
+  codi = clauCodi_(codi);
   if (!codi) return null;
-  return jugadores_('', true).filter(function (j) { return j.codi === codi; })[0] || null;
+  return jugadores_('', true).filter(function (j) { return clauCodi_(j.codi) === codi; })[0] || null;
 }
 
 /** Tipus d'entrenament amb els seus minuts, tal com estan a Config. */
@@ -406,6 +433,37 @@ function minutsDelTipus_(nom) {
 }
 
 /**
+ * Dos codis iguals voldrien dir que algu entra fent-se passar per una altra
+ * persona, i ningu se n'assabentaria. Com que ara els codis els escriu una
+ * persona seguint un patro (inicial del nom + inicial del cognom + equip),
+ * xocar es facil: dues "Clara B." del mateix equip donen el mateix codi.
+ *
+ * Retorna una llista de textos, un per cada codi repetit, a punt d'ensenyar.
+ */
+function codisRepetits_() {
+  var qui = {};
+  var apunta = function (codi, nom) {
+    var k = clauCodi_(codi);
+    if (!k) return;
+    if (!qui[k]) qui[k] = [];
+    qui[k].push(nom);
+  };
+
+  jugadores_('', false).forEach(function (j) { apunta(j.codi, j.nom || j.id); });
+  try {
+    files_('usuaris').forEach(function (u) {
+      apunta(u.pin, text_(u.nom) || 'staff sense nom');
+    });
+  } catch (err) { /* encara sense pestanya */ }
+  var pinStaff = configuracio_().pin_staff;
+  if (text_(pinStaff)) apunta(pinStaff, 'pin_staff de Config');
+
+  return Object.keys(qui).filter(function (k) { return qui[k].length > 1; })
+    .sort()
+    .map(function (k) { return k + ' \u2192 ' + qui[k].join(', '); });
+}
+
+/**
  * Codis de 4 xifres per a les jugadores que encara no en tinguin. No en
  * repeteix cap, ni dels que ja hi ha ni dels de l'staff: dos codis iguals
  * voldrien dir que una jugadora entra com una altra persona.
@@ -421,11 +479,11 @@ function generaCodis_() {
 
   var usats = {};
   try {
-    files_('usuaris').forEach(function (u) { if (text_(u.pin)) usats[text_(u.pin)] = true; });
+    files_('usuaris').forEach(function (u) { if (text_(u.pin)) usats[clauCodi_(u.pin)] = true; });
   } catch (err) { /* encara sense pestanya */ }
-  var pinStaff = text_(configuracio_().pin_staff);
+  var pinStaff = clauCodi_(configuracio_().pin_staff);
   if (pinStaff) usats[pinStaff] = true;
-  dades.forEach(function (f) { if (text_(f[iCodi])) usats[text_(f[iCodi])] = true; });
+  dades.forEach(function (f) { if (text_(f[iCodi])) usats[clauCodi_(f[iCodi])] = true; });
 
   var columna = [];
   var fets = 0;
