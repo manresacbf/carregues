@@ -112,6 +112,26 @@ torni a entrar. El seu resum no es perd.
 que li arriba: mira de qui és el codi i desa el registre a aquella jugadora.
 Abans qualsevol podia enviar dades fent-se passar per una altra.
 
+## Jugadores que entrenen amb dos equips
+
+La columna `equip` de `Jugadores` admet **més d'un equip separats per comes**:
+`U16, U17`. Amb un de sol funciona igual que sempre.
+
+Una jugadora amb dos equips la veuen **els dos cossos tècnics**: surt al panell
+dels dos, als xips de filtre dels dos i a la pantalla de *Dia de partit* dels
+dos. La seva càrrega és una de sola, la sumi entrenant on la sumi, que és
+justament el que evita que dos entrenadors li carreguin la setmana sense
+saber-ho l'un de l'altre.
+
+Dues coses a tenir presents:
+
+- **A la graella no es distingeix amb quin equip va entrenar cada dia.** La
+  càrrega hi suma bé; d'on venia, no hi consta.
+- **Si els dos equips juguen el mateix dia**, la fila de minuts és una per
+  jugadora i dia: els minuts que desi el segon entrenador substituiran els del
+  primer. A la pràctica no pot jugar dos partits el mateix dia, però si passés,
+  val més saber-ho.
+
 ## Qui veu què
 
 Cada persona del cos tècnic té el seu PIN a la pestanya **`Usuaris`**:

@@ -911,13 +911,21 @@ async function demanaPanell(dilluns) {
 
 let equipPanell = '';
 
+/* Una jugadora pot ser de mes d'un equip: n'hi ha que entrenen amb dos.
+   El full ho envia a 'equips'; 'equip' continua sent el text per ensenyar. */
+function equipsDe(j) {
+  if (j.equips && j.equips.length) return j.equips;
+  return j.equip ? [j.equip] : [];
+}
+
 function jugadoresVisibles() {
-  return (panell.jugadores || []).filter((j) => !equipPanell || j.equip === equipPanell);
+  return (panell.jugadores || []).filter((j) =>
+    !equipPanell || equipsDe(j).indexOf(equipPanell) !== -1);
 }
 
 function equipsDelPanell() {
   const vist = {};
-  (panell.jugadores || []).forEach((j) => { if (j.equip) vist[j.equip] = true; });
+  (panell.jugadores || []).forEach((j) => equipsDe(j).forEach((e) => { vist[e] = true; }));
   return Object.keys(vist).sort();
 }
 
@@ -1299,13 +1307,16 @@ let partitStaff = null;     // el que ha tornat getPartit
 function jugadoresDelEquip(equip) {
   if (!panell || !panell.jugadores) return [];
   return panell.jugadores
-    .filter((j) => !equip || j.equip === equip)
+    .filter((j) => !equip || equipsDe(j).indexOf(equip) !== -1)
     .map((j) => ({ id: j.id, nom: j.nom, dorsal: j.dorsal }));
 }
 
 function pintaPartitStaff() {
   if (!esStaff()) { ves('#/inici'); return; }
   $('#titol').textContent = 'Dia de partit';
+  // El que hi hagi carregat es d'un altre dia o d'un altre equip: en entrar
+  // aqui es torna a demanar, i mentrestant val mes no ensenyar-ho.
+  partitStaff = null;
 
   const equips = elsMeusEquips();
   if (!equips.length) {

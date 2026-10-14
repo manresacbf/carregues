@@ -657,17 +657,35 @@ function equipsPermesos_(usuari) {
  *  Lectures                                                           *
  * ------------------------------------------------------------------ */
 
+/**
+ * Els equips d'una jugadora. La columna admet mes d'un separat per comes
+ * ("U16, U17"): n'hi ha que entrenen amb dos equips i les han de veure els
+ * dos cossos tecnics. Amb un sol equip funciona igual que sempre.
+ */
+function equipsDe_(f) { return llista_(f.equip); }
+
+/** Que algun dels equips d'aquesta jugadora sigui a la llista. */
+function teAlgunEquip_(equips, permesos) {
+  for (var i = 0; i < equips.length; i++) {
+    if (permesos.indexOf(equips[i]) !== -1) return true;
+  }
+  return false;
+}
+
 function jugadores_(equip, nomesActives) {
   return files_('jugadores')
     .filter(function (f) { return text_(f.id) && text_(f.nom); })
     .filter(function (f) { return !nomesActives || esSi_(f.activa); })
-    .filter(function (f) { return !equip || text_(f.equip) === equip; })
+    .filter(function (f) { return !equip || equipsDe_(f).indexOf(equip) !== -1; })
     .map(function (f) {
       return {
         id: text_(f.id),
         nom: text_(f.nom),
         dorsal: text_(f.dorsal),
+        // 'equip' es el text tal com esta al full, per ensenyar-lo;
+        // 'equips' es la llista, per filtrar.
         equip: text_(f.equip),
+        equips: equipsDe_(f),
         activa: esSi_(f.activa),
         // Nomes per a entrar_(): cap resposta de l'API l'ha de portar mai.
         codi: text_(f.codi)
@@ -989,7 +1007,7 @@ function getPanell_(equip, dilluns, usuari) {
   // equips a la seva fila no en veu cap.
   var permesos = equipsPermesos_(usuari);
   var jugs = jugadores_(text_(equip), true).filter(function (j) {
-    return !permesos || permesos.indexOf(j.equip) !== -1;
+    return !permesos || teAlgunEquip_(j.equips, permesos);
   });
   var avui = avuiISO_();
 
@@ -1104,7 +1122,7 @@ function getPanell_(equip, dilluns, usuari) {
     });
 
     return {
-      id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip,
+      id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip, equips: j.equips,
       dies: cel,
       carrega_setmana: c.carrega_setmana,
       mitjana_previa: c.mitjana_previa,
@@ -1147,7 +1165,7 @@ function getJugadoraStaff_(id, nSetmanes, usuari) {
   // Sense aquesta comprovacio, un entrenador podria demanar la fitxa de
   // qualsevol jugadora del club posant-hi l'id a ma.
   var permesos = equipsPermesos_(usuari);
-  if (permesos && permesos.indexOf(j.equip) === -1) {
+  if (permesos && !teAlgunEquip_(j.equips, permesos)) {
     return json_({ ok: false, error: "Aquesta jugadora no es d'un equip teu." });
   }
 
@@ -1194,7 +1212,8 @@ function getJugadoraStaff_(id, nSetmanes, usuari) {
     });
 
   // Sense el codi: es el que fa servir per entrar i no ha de viatjar mai.
-  var fitxa = { id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip, activa: j.activa };
+  var fitxa = { id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip,
+                equips: j.equips, activa: j.activa };
   return json_({ ok: true, data: { jugadora: fitxa, setmanes: setmanes, molesties: molesties } });
 }
 
