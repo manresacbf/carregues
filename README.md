@@ -123,6 +123,16 @@ dos. La seva càrrega és una de sola, la sumi entrenant on la sumi, que és
 justament el que evita que dos entrenadors li carreguin la setmana sense
 saber-ho l'un de l'altre.
 
+Al panell, qui té més d'un equip porta **els seus equips al costat del nom**
+(`U16 · U17`). Sense això no s'entén que faci més càrrega de la que ha fet amb
+tu.
+
+**El filtre d'equips només ofereix els equips de qui mira.** Una jugadora
+compartida porta al panell un equip que l'entrenador no té; aquell xip
+prometria la llista d'aquell equip i només ensenyaria aquella jugadora. Per
+això un entrenador d'un sol equip **no veu el filtre**: no hi ha res a triar.
+El director els veu tots.
+
 Dues coses a tenir presents:
 
 - **A la graella no es distingeix amb quin equip va entrenar cada dia.** La

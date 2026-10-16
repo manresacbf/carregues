@@ -923,10 +923,22 @@ function jugadoresVisibles() {
     !equipPanell || equipsDe(j).indexOf(equipPanell) !== -1);
 }
 
+/** Els equips de qui mira el panell. Buit vol dir que els veu tots. */
+function elsSeusEquips() {
+  const u = panell.usuari || {};
+  return u.rol === 'director' ? [] : (u.equips || []);
+}
+
 function equipsDelPanell() {
   const vist = {};
   (panell.jugadores || []).forEach((j) => equipsDe(j).forEach((e) => { vist[e] = true; }));
-  return Object.keys(vist).sort();
+  const tots = Object.keys(vist).sort();
+
+  // Amb jugadores compartides hi surten equips que no son seus: una del U16
+  // que tambe entrena amb el U17 hi porta el U17. Aquell xip prometria la
+  // llista del U17 i nomes ensenyaria aquella jugadora.
+  const seus = elsSeusEquips();
+  return seus.length ? tots.filter((e) => seus.indexOf(e) !== -1) : tots;
 }
 
 /**
@@ -1135,8 +1147,15 @@ function pintaPanell() {
     const titol = v === null ? (j.motiu_ratio || 'sense referència')
       : 'setmana ' + j.carrega_setmana + ' · mitjana de les 3 anteriors ' + j.mitjana_previa;
 
+    // Qui entrena amb mes d'un equip porta els seus equips al costat: si no,
+    // no s'enten que faci mes carrega de la que ha fet amb tu.
+    const seus = equipsDe(j);
+    const etiqueta = seus.length > 1
+      ? '<span class="equips-jug">' + esc(seus.join(' · ')) + '</span>'
+      : '';
+
     return '<tr><td class="nom"><button type="button" class="chip" data-fitxa="' + esc(j.id) + '" style="min-height:34px">' +
-        (j.dorsal ? '<b>' + esc(j.dorsal) + '</b> ' : '') + esc(j.nom) + '</button></td>' +
+        (j.dorsal ? '<b>' + esc(j.dorsal) + '</b> ' : '') + esc(j.nom) + etiqueta + '</button></td>' +
       j.dies.map((d) => {
         const te = d.carrega !== null && d.carrega !== undefined;
         return '<td class="cel' + (te ? ' plena' : ' buida') + (d.limita ? ' limita' : '') + '"' +
