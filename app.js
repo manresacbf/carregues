@@ -1200,7 +1200,7 @@ function pintaPanell() {
     // i el resum de partits és només seu.
     '<div class="accions-staff">' +
       (esDirector()
-        ? '<button type="button" class="btn secundari" id="ves-resum">📊 Resum de partits</button>'
+        ? '<button type="button" class="btn secundari" id="ves-resum">📊 Resum de sessions</button>'
         : '<button type="button" class="btn secundari" id="ves-partit">🏀 Dia de partit</button>' +
           '<button type="button" class="btn secundari" id="ves-entreno">🏋️ Dia d&#39;entrenament</button>') +
     '</div>' +
@@ -1492,6 +1492,49 @@ async function desaPartitStaff() {
 
 /* ---- Dia d'entrenament ---- */
 
+/**
+ * Omple el que ja estigui desat d'aquell dia SENSE trepitjar el que
+ * l'entrenador hagi comencat a triar mentre arribava la resposta.
+ */
+function aplicaEntrenoDesat(s) {
+  if (!s) return;
+  if (s.valoracio && !$('[data-escala="valoracio-entreno"] button[aria-pressed="true"]')) {
+    const b = $('[data-escala="valoracio-entreno"] button[data-valor="' + s.valoracio + '"]');
+    if (b) b.setAttribute('aria-pressed', 'true');
+  }
+  if (s.te_objectiu && !$('#objectiu button[aria-pressed="true"]')) {
+    const b = $('#objectiu button[data-valor="' + (s.objectiu ? 'si' : 'no') + '"]');
+    if (b) b.setAttribute('aria-pressed', 'true');
+  }
+  if (s.comentari && !$('#comentari').value) $('#comentari').value = s.comentari;
+
+  const avis = $('#avis-entreno');
+  if (avis) {
+    avis.textContent = 'Aquest dia ja estava desat: si deses, s\'actualitza.';
+    avis.style.color = 'var(--avis)';
+  }
+}
+
+async function carregaEntreno() {
+  const avis = $('#avis-entreno');
+  if (avis) { avis.textContent = ''; }
+  try {
+    const res = await api('getSessio', {
+      data: $('#data-sessio').value || avuiISO(),
+      equip: equipTriatALaPantalla(),
+      tipus: 'entrenament'
+    }, 3);
+    if (!res || !res.ok) throw new Error((res && res.error) || 'Error');
+    if (rutaActual().vista !== 'entreno-staff') return;   // ja no hi som
+    aplicaEntrenoDesat(res.data.sessio);
+  } catch (e) {
+    if (avis) {
+      avis.textContent = 'No s\'ha pogut mirar si ja hi havia res desat.';
+      avis.style.color = 'var(--pink)';
+    }
+  }
+}
+
 function pintaEntrenoStaff() {
   if (!esStaff()) { ves('#/inici'); return; }
   $('#titol').textContent = 'Dia d\'entrenament';
@@ -1516,7 +1559,8 @@ function pintaEntrenoStaff() {
       '</div>' +
     '</div>' +
     blocComentari('Com ha anat? (opcional)') +
-    '<button class="btn" id="desa-entreno">Desar l\'entrenament</button>';
+    '<button class="btn" id="desa-entreno">Desar l\'entrenament</button>' +
+    '<p class="meta" id="avis-entreno" style="text-align:center;margin-top:9px;min-height:18px"></p>';
 
   $$('#equip-sessio .chip').forEach((b) => b.addEventListener('click', () => {
     $$('#equip-sessio .chip').forEach((x) => x.setAttribute('aria-pressed', 'false'));
@@ -1524,6 +1568,17 @@ function pintaEntrenoStaff() {
   }));
   enganxaUnicaTria('[data-escala="valoracio-entreno"]');
   enganxaUnicaTria('#objectiu');
+  carregaEntreno();
+
+  // Canviant d'equip o de dia, el que hi havia triat ja no val.
+  const altreDia = () => {
+    $$('[data-escala="valoracio-entreno"] button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    $$('#objectiu button').forEach((b) => b.setAttribute('aria-pressed', 'false'));
+    $('#comentari').value = '';
+    carregaEntreno();
+  };
+  $$('#equip-sessio .chip').forEach((b) => b.addEventListener('click', altreDia));
+  $('#data-sessio').addEventListener('change', altreDia);
 
   $('#desa-entreno').addEventListener('click', async () => {
     const boto = $('#desa-entreno');
@@ -1568,6 +1623,9 @@ function colorMinuts(m, max) {
   return "background:rgba(255,45,120," + (0.16 + p * 0.64).toFixed(2) + ");";
 }
 
+/** El full desa l'objectiu com a SI/NO. */
+function esSi(v) { return String(v).trim().toUpperCase() === 'SI'; }
+
 function caraDe(v) {
   const c = ESC_COM_HA_ANAT.filter((x) => x.v === Number(v))[0];
   return c ? c.e : '';
@@ -1576,7 +1634,7 @@ function caraDe(v) {
 function pintaResumPartits() {
   if (!esStaff()) { ves('#/inici'); return; }
   if (!esDirector()) { ves('#/panell'); return; }
-  $('#titol').textContent = 'Resum de partits';
+  $('#titol').textContent = 'Resum de sessions';
 
   if (!resum) {
     $('#contingut').innerHTML = '<p class="buit">Carregant…<br>' +
@@ -1610,9 +1668,9 @@ function pintaResumPartits() {
     : '';
 
   const blocs = visibles.map((eq) => {
-    if (!eq.partits.length) {
+    if (!eq.partits.length && !(eq.entrenaments || []).length) {
       return '<div class="card"><div class="eyebrow">' + esc(eq.equip) + '</div>' +
-        '<p class="meta" style="margin:0">Cap partit registrat encara.</p></div>';
+        '<p class="meta" style="margin:0">Cap sessi\u00f3 registrada encara.</p></div>';
     }
 
     const maxTotal = Math.max.apply(null, eq.jugadores.map((j) => j.total).concat([1]));
@@ -1644,34 +1702,54 @@ function pintaResumPartits() {
 
     const comentaris = eq.partits.filter((p) => p.comentari);
 
-    return '<div class="card">' +
-      '<div class="eyebrow">' + esc(eq.equip) + ' &middot; ' +
-        (eq.partits.length === 1 ? 'últim partit' : 'últims ' + eq.partits.length + ' partits') + '</div>' +
-      '<div class="graella-embolcall"><table class="graella minuts"><thead><tr><th></th>' +
-        caps + '</tr></thead><tbody>' + files + '</tbody></table></div>' +
-      '<p class="meta" style="margin-top:10px">' +
-        'Cada cel·la són els minuts d&#39;aquell partit (el punt mitjà del tram que va ' +
-        'posar l&#39;entrenador/a). «–» vol dir que no va jugar. ' +
-        'La cara de sobre la data és com va dir el cos tècnic que havia anat el partit.' +
-      '</p>' +
-      '<div class="eyebrow" style="margin-top:16px">Minuts totals</div>' +
-      '<div class="barres-min">' + totals + '</div>' +
-      '<p class="meta" style="margin-top:10px">' +
-        'De més a menys minuts, i al costat en quants dels ' + eq.partits.length + ' partits ha jugat.' +
-      '</p>' +
-      (comentaris.length
-        ? '<div class="eyebrow" style="margin-top:16px">Què en va dir el cos tècnic</div>' +
-          comentaris.map((p) =>
-            '<div class="molestia"><span class="qui">' + esc(diaCurt(p.data)) + ' ' +
-              esc(formatDia(p.data)) + ' ' + caraDe(p.valoracio) + '</span>' +
-              '<span class="on">' + esc(p.comentari) + '</span></div>').join('')
-        : '') +
-    '</div>';
+    // El que han anat escrivint els entrenadors cada dia d'entrenament.
+    const entrenos = (eq.entrenaments || []).slice().reverse();
+    const blocEntrenos = entrenos.length
+      ? '<div class="eyebrow" style="margin-top:' + (eq.partits.length ? '16' : '0') + 'px">Entrenaments</div>' +
+        entrenos.map((e) =>
+          '<div class="molestia">' +
+            '<span class="qui">' + esc(diaCurt(e.data)) + ' ' + esc(formatDia(e.data)) + ' ' +
+              caraDe(e.valoracio) +
+              (e.objectiu ? ' &middot; objectiu ' + (esSi(e.objectiu) ? 'sí' : 'no') : '') +
+            '</span>' +
+            (e.comentari ? '<span class="on">' + esc(e.comentari) + '</span>' : '') +
+            (e.responsable ? '<span class="quan">' + esc(e.responsable) + '</span>' : '') +
+          '</div>').join('')
+      : '';
+
+    // Un equip pot tenir entrenaments i encara cap partit: llavors la graella
+    // de minuts no te res a dir i val mes no ensenyar-la.
+    const blocPartits = eq.partits.length
+      ? '<div class="eyebrow">' + esc(eq.equip) + ' &middot; ' +
+          (eq.partits.length === 1 ? 'últim partit' : 'últims ' + eq.partits.length + ' partits') + '</div>' +
+        '<div class="graella-embolcall"><table class="graella minuts"><thead><tr><th></th>' +
+          caps + '</tr></thead><tbody>' + files + '</tbody></table></div>' +
+        '<p class="meta" style="margin-top:10px">' +
+          'Cada cel·la són els minuts d&#39;aquell partit (el punt mitjà del tram que va ' +
+          'posar l&#39;entrenador/a). «–» vol dir que no va jugar. ' +
+          'La cara de sobre la data és com va dir el cos tècnic que havia anat el partit.' +
+        '</p>' +
+        '<div class="eyebrow" style="margin-top:16px">Minuts totals</div>' +
+        '<div class="barres-min">' + totals + '</div>' +
+        '<p class="meta" style="margin-top:10px">' +
+          'De més a menys minuts, i al costat en quants dels ' + eq.partits.length + ' partits ha jugat.' +
+        '</p>' +
+        (comentaris.length
+          ? '<div class="eyebrow" style="margin-top:16px">Què es va dir de cada partit</div>' +
+            comentaris.map((p) =>
+              '<div class="molestia"><span class="qui">' + esc(diaCurt(p.data)) + ' ' +
+                esc(formatDia(p.data)) + ' ' + caraDe(p.valoracio) + '</span>' +
+                '<span class="on">' + esc(p.comentari) + '</span></div>').join('')
+          : '')
+      : '<div class="eyebrow">' + esc(eq.equip) + '</div>' +
+        '<p class="meta" style="margin:0 0 4px">Cap partit registrat encara.</p>';
+
+    return '<div class="card">' + blocPartits + blocEntrenos + '</div>';
   }).join('');
 
   $('#contingut').innerHTML =
     filtres +
-    (blocs || '<p class="buit">Encara no hi ha cap partit registrat.</p>') +
+    (blocs || '<p class="buit">Encara no hi ha cap sessió registrada.</p>') +
     '<button class="btn secundari" id="torna-panell">Tornar al panell</button>';
 
   $$('#contingut [data-eq]').forEach((b) => b.addEventListener('click', () => {

@@ -1314,6 +1314,9 @@ function doPost(e) {
       case 'getPanell':   return getPanell_(body.equip, dataISO_(body.setmana), usuari);
       case 'getJugadora': return getJugadoraStaff_(body.id, body.n_setmanes, usuari);
       case 'getPartit':   return getPartit_(dataISO_(body.data), text_(body.equip), usuari);
+      case 'getSessio':
+        return getSessio_(dataISO_(body.data), text_(body.equip), text_(body.tipus), usuari);
+      case 'getResumSessions':
       case 'getResumPartits':
         return getResumPartits_(text_(body.equip), body.n, usuari);
       default:            return json_({ ok: false, error: 'Accio desconeguda: ' + action });
@@ -1367,6 +1370,16 @@ function getResumPartits_(equip, n, usuari) {
   /* Un partit es una data i un equip. Pot venir de 'Sessions' (l'entrenador
      ha dit com ha anat) o nomes de 'Minuts' (nomes n'ha posat els minuts). */
   var perEquip = {};
+  var entrenaments = {};   // equip -> { data -> sessio }
+
+  var apuntaEntreno = function (e, data, s) {
+    if (!potVeure(e) || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return;
+    if (!entrenaments[e]) entrenaments[e] = {};
+    entrenaments[e][data] = { data: data, valoracio: num_(s.valoracio),
+                              objectiu: text_(s.objectiu), comentari: text_(s.comentari),
+                              responsable: text_(s.responsable) };
+  };
+
   var apunta = function (e, data) {
     if (!potVeure(e) || !/^\d{4}-\d{2}-\d{2}$/.test(data)) return null;
     if (!perEquip[e]) perEquip[e] = { partits: {}, minuts: {}, noms: {} };
@@ -1378,7 +1391,12 @@ function getResumPartits_(equip, n, usuari) {
 
   try {
     files_('sessions').forEach(function (s) {
-      if (text_(s.tipus) !== 'partit') return;
+      var tipus = text_(s.tipus);
+      if (tipus === 'entrenament') {
+        apuntaEntreno(text_(s.equip), dataISO_(s.data), s);
+        return;
+      }
+      if (tipus !== 'partit') return;
       var p = apunta(text_(s.equip), dataISO_(s.data));
       if (!p) return;
       p.valoracio = num_(s.valoracio);
@@ -1398,6 +1416,9 @@ function getResumPartits_(equip, n, usuari) {
     if (text_(m.nom_jugadora)) perEquip[e].noms[idJ] = text_(m.nom_jugadora);
   });
 
+  Object.keys(entrenaments).forEach(function (e) {
+    if (!perEquip[e]) perEquip[e] = { partits: {}, minuts: {}, noms: {} };
+  });
   var equips = Object.keys(perEquip).sort();
   var resultat = equips.map(function (e) {
     var dades = perEquip[e];
@@ -1441,10 +1462,44 @@ function getResumPartits_(equip, n, usuari) {
        queda a baix de tot, no l'ordre dels dorsals. */
     files.sort(function (a, b) { return b.total - a.total || a.nom.localeCompare(b.nom); });
 
-    return { equip: e, partits: partits, jugadores: files, maxim: maxim };
+    /* Els ultims entrenaments, en ordre cronologic com els partits. */
+    var seus = entrenaments[e] || {};
+    var entrenos = Object.keys(seus).sort().slice(-quants).map(function (d) { return seus[d]; });
+
+    return { equip: e, partits: partits, jugadores: files, maxim: maxim,
+             entrenaments: entrenos };
   });
 
   return json_({ ok: true, data: { equips: resultat, n: quants } });
+}
+
+/**
+ * El que l'entrenador ja va desar d'aquell dia, per poder-ho corregir en
+ * comptes de tornar a comencar. La pantalla de partit ja ho feia; la
+ * d'entrenament es quedava en blanc i no es podia ni repassar.
+ */
+function getSessio_(data, equip, tipus, usuari) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return json_({ ok: false, error: 'Data no valida.' });
+  if (tipus !== 'partit' && tipus !== 'entrenament') {
+    return json_({ ok: false, error: 'Tipus no valid.' });
+  }
+  var permesos = equipsPermesos_(usuari);
+  if (permesos && permesos.indexOf(equip) === -1) {
+    return json_({ ok: false, error: "Aquest equip no es teu." });
+  }
+
+  var sessio = null;
+  try {
+    files_('sessions').forEach(function (f) {
+      if (dataISO_(f.data) === data && text_(f.equip) === equip && text_(f.tipus) === tipus) {
+        sessio = { valoracio: num_(f.valoracio), objectiu: esSi_(f.objectiu),
+                   te_objectiu: text_(f.objectiu) !== '', comentari: text_(f.comentari),
+                   responsable: text_(f.responsable) };
+      }
+    });
+  } catch (err) { /* encara sense pestanya */ }
+
+  return json_({ ok: true, data: { data: data, equip: equip, tipus: tipus, sessio: sessio } });
 }
 
 /**

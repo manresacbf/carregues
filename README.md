@@ -199,6 +199,14 @@ No és només documentació: està al codi.
 - **Dia d'entrenament**: com ha anat, si s'ha complert l'objectiu i un
   comentari.
 
+Les dues pantalles **reomplen el que ja hi hagi desat** d'aquell dia i equip,
+perquè es pugui corregir sense tornar a començar. Canviant de dia o d'equip
+es buiden.
+
+El **director** ho veu tot junt a **Resum de sessions**: per equip, la graella
+de minuts dels últims partits i, a sota, els entrenaments amb la data, com va
+anar, si es va complir l'objectiu, el comentari i qui el va escriure.
+
 **El director tècnic** no entra dades de cap equip — les entra qui és a la
 pista — i al seu panell els dos botons d'a dalt no hi surten.
 
