@@ -205,7 +205,14 @@ es buiden.
 
 El **director** ho veu tot junt a **Resum de sessions**: per equip, la graella
 de minuts dels últims partits i, a sota, els entrenaments amb la data, com va
-anar, si es va complir l'objectiu, el comentari i qui el va escriure.
+anar, si es va complir l'objectiu, el comentari i qui el va escriure. Les dues
+llistes van **del més nou al més antic**: el que interessa és l'última sessió,
+no la primera de la temporada. Les columnes de la graella de minuts sí que van
+en ordre de calendari, d'esquerra a dreta.
+
+Al panell, el bloc **Qui falta** va **plegat**: la llista de noms ocupava mitja
+pantalla. El títol ja diu quantes en falten, que si no s'hauria d'obrir cada
+dia només per saber si val la pena obrir-lo.
 
 **El director tècnic** no entra dades de cap equip — les entra qui és a la
 pista — i al seu panell els dos botons d'a dalt no hi surten.

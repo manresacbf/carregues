@@ -234,6 +234,26 @@
   .barra-compliment{height:9px; background:var(--bg-alt); border-radius:999px; overflow:hidden; margin:8px 0 6px;}
   .barra-compliment i{display:block; height:100%; background:var(--ok);}
 
+  /* ---------- Bloc plegable ---------- */
+  details.plegable{
+    background:var(--bg-raised); border:1px solid var(--line);
+    border-radius:14px; padding:13px; margin-bottom:12px;
+  }
+  details.plegable summary{
+    display:flex; align-items:center; gap:10px;
+    list-style:none; cursor:pointer; min-height:22px;
+  }
+  details.plegable summary::-webkit-details-marker{display:none;}
+  details.plegable summary .eyebrow{flex:1; margin:0;}
+  details.plegable summary .quantes{font-size:12.5px; font-weight:600; color:var(--text-dim);}
+  details.plegable summary .quantes.hi-ha{color:var(--avis);}
+  /* La fletxa gira en obrir-se */
+  details.plegable summary::after{
+    content:'\203a'; flex:0 0 auto; font-size:19px; line-height:1;
+    color:var(--text-dim); transform:rotate(90deg); transition:transform .15s;
+  }
+  details.plegable[open] summary::after{transform:rotate(-90deg);}
+
   .filtres-equip{display:flex; gap:6px; overflow-x:auto; padding:2px 0 10px; scrollbar-width:none;}
   .filtres-equip::-webkit-scrollbar{display:none;}
   table.graella th.dia-entreno{color:var(--text);}

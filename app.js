@@ -1183,9 +1183,19 @@ function pintaPanell() {
 
     // Qui no ha contestat segueix sent útil; el percentatge no, que ja es
     // veu a la graella de sota.
-    '<div class="card">' +
-      '<div class="eyebrow">Qui falta' + (equipPanell ? ' · ' + esc(equipPanell) : '') + '</div>' +
-      '<p class="meta" style="margin:0">Dies comptats: ' +
+    // Plegat de sèrie: la llista de noms ocupava mitja pantalla. El títol ja
+    // diu quantes en falten, que si no s'hauria d'obrir cada dia només per
+    // saber si val la pena obrir-lo.
+    '<details class="plegable">' +
+      '<summary>' +
+        '<span class="eyebrow">Qui falta' + (equipPanell ? ' · ' + esc(equipPanell) : '') + '</span>' +
+        '<span class="quantes' + (c.sense.length ? ' hi-ha' : '') + '">' +
+          (!visibles.length
+            ? 'cap jugadora'
+            : (c.sense.length ? c.sense.length + ' sense resposta' : 'totes han contestat')) +
+        '</span>' +
+      '</summary>' +
+      '<p class="meta" style="margin:12px 0 0">Dies comptats: ' +
         (diesEsperats.length
           ? diesEsperats.map((d) => esc(diaCurt(d)) + ' ' + esc(d.slice(8, 10))).join(', ')
           : 'cap encara') + '.</p>' +
@@ -1194,7 +1204,7 @@ function pintaPanell() {
         : (visibles.length
             ? '<p class="meta" style="margin:8px 0 0">Totes han contestat algun dia.</p>'
             : '<p class="meta" style="margin:8px 0 0">Cap jugadora en aquesta vista.</p>')) +
-    '</div>' +
+    '</details>' +
 
     // El director no entra dades de cap equip — les entra qui hi és a la pista —
     // i el resum de partits és només seu.
@@ -1700,7 +1710,9 @@ function pintaResumPartits() {
           j.jugats + '/' + eq.partits.length + '</span></span>' +
       '</div>').join('');
 
-    const comentaris = eq.partits.filter((p) => p.comentari);
+    // Del mes nou al mes antic, com els entrenaments: el que interessa
+    // es l'ultim partit, no el primer de la temporada.
+    const comentaris = eq.partits.filter((p) => p.comentari).slice().reverse();
 
     // El que han anat escrivint els entrenadors cada dia d'entrenament.
     const entrenos = (eq.entrenaments || []).slice().reverse();
