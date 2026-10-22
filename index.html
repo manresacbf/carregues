@@ -282,6 +282,29 @@
   .fila-min .tot{flex:0 0 76px; text-align:right; font-weight:700; white-space:nowrap;
     font-variant-numeric:tabular-nums;}
   .fila-min .quants{font-weight:400; font-size:11px; color:var(--text-dim);}
+  /* La safata del detall: fixa a baix de la pantalla mentre toques cel·les */
+  #detall-cel{
+    position:fixed; z-index:45; left:10px; right:10px;
+    bottom:calc(10px + env(safe-area-inset-bottom));
+    max-width:540px; margin:0 auto;
+    background:var(--bg-raised); border:1px solid var(--pink-dim);
+    border-radius:14px; padding:12px 38px 12px 14px;
+    box-shadow:0 10px 30px rgba(0,0,0,.55);
+    font-size:14px; line-height:1.45;
+    max-height:45vh; overflow-y:auto;
+  }
+  #detall-cel .info{display:block;}
+  #detall-cel .diu{
+    display:block; margin-top:7px; padding-top:7px;
+    border-top:1px solid var(--line); color:var(--text);
+  }
+  #detall-cel .diu b{color:var(--pink);}
+  #detall-cel .tanca{
+    position:absolute; top:6px; right:8px;
+    background:none; border:0; color:var(--text-dim);
+    font-size:21px; line-height:1; padding:4px 7px; cursor:pointer;
+  }
+
   .detall-cel{
     margin:10px 0 0; padding:10px 12px; font-size:14px; min-height:42px;
     background:var(--bg); border:1px solid var(--line); border-radius:10px;
@@ -362,6 +385,11 @@
     <button class="sync" id="estat-sync"><span class="punt"></span><span id="estat-sync-text">Sincronitzat</span></button>
   </div>
   <main id="contingut"></main>
+
+  <!-- La safata del detall d'una cel.la del panell. Fixa a baix de la
+       pantalla: abans sortia sota la graella i s'havia de saber que calia
+       baixar-hi per veure-la. -->
+  <p id="detall-cel" class="amagat"></p>
 </div>
 
 <div id="toast" class="amagat"></div>

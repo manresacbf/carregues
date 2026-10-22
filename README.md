@@ -167,6 +167,20 @@ d'un altre equip. Si es fes al mòbil, un entrenador podria canviar la petició
 i veure-ho tot igualment. Els xips de filtre del panell són comoditat visual,
 no una barrera.
 
+## El que escriuen les jugadores
+
+El camp de comentari és obert i opcional, i és on una jugadora pot dir una
+cosa que no cap a cap casella. Es veu de dues maneres:
+
+- **Al panell**, tocant una cel·la: el detall surt en una safata enganxada a
+  baix de la pantalla, amb el comentari de cada moment del dia (abans, després,
+  dia de partit). La safata és fixa a posta: abans el detall sortia sota la
+  graella i calia saber que s'hi havia de baixar.
+- **A la fitxa**, al bloc «El que ha escrit ella», amb els últims 30.
+
+Fins l'octubre del 2026 **només es veia el comentari dels dies amb molèstia**;
+la resta es desava al full i no el llegia ningú.
+
 ## Privacitat
 
 No és només documentació: està al codi.

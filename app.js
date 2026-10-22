@@ -312,6 +312,17 @@ function esStaff() {
 }
 function esDirector() { return sessio.tipus === 'director'; }
 
+/** Com es diu cada formulari quan s'ensenya un comentari seu. */
+const MOMENTS = { abans: 'Abans', despres: 'Després', partit: 'Dia de partit' };
+
+/* El detall d'una cel·la sortia sota la graella i s'havia de saber que calia
+   baixar-hi. Ara apareix enganxat a baix de la pantalla, com una safata. */
+function amagaDetall() {
+  const p = $('#detall-cel');
+  if (p) p.classList.add('amagat');
+  $$('#contingut td.cel.triada').forEach((x) => x.classList.remove('triada'));
+}
+
 function guardaSessio() { guarda(CLAUS.sessio, sessio); }
 
 function pintaEntrada(missatge) {
@@ -447,6 +458,7 @@ function ruta() {
   const enrere = $('#enrere');
   enrere.classList.toggle('amagat', r.vista === 'inici' || (esStaff() && r.vista === 'panell'));
 
+  amagaDetall();
   if (r.vista === 'abans') pintaAbans();
   else if (r.vista === 'despres') pintaDespres();
   else if (r.vista === 'partit') pintaPartit();
@@ -1220,7 +1232,7 @@ function pintaPanell() {
       '<div class="graella-embolcall"><table class="graella"><thead><tr><th></th>' + capsDies +
         '<th title="Respecte la mitjana de les 3 setmanes anteriors">vs<br>normal</th></tr></thead>' +
       '<tbody>' + (files || '<tr><td class="nom">Cap jugadora</td></tr>') + '</tbody></table></div>' +
-      '<p class="detall-cel" id="detall-cel">Toca una cel·la per veure què hi ha darrere.</p>' +
+      '<p class="meta" style="margin:10px 0 0">Toca una cel·la per veure què hi ha darrere.</p>' +
       '<p class="meta" style="margin-top:10px">' +
         'Com més magenta, més càrrega. Les cel·les es comparen entre elles: la més encesa de ' +
         'tota la graella és la sessió més dura que ha fet qualsevol jugadora aquesta setmana, ' +
@@ -1252,6 +1264,7 @@ function pintaPanell() {
   if ($('#ves-resum')) $('#ves-resum').addEventListener('click', () => { resum = null; ves('#/resum-partits'); });
 
   $$('#contingut [data-equip]').forEach((b) => b.addEventListener('click', () => {
+    amagaDetall();
     equipPanell = b.getAttribute('data-equip');
     pintaPanell();
   }));
@@ -1280,12 +1293,23 @@ function pintaPanell() {
         ? '<b style="color:var(--vermell)">' + esc(on) + ' &mdash; la limita</b>'
         : esc(on));
     }
-    $('#detall-cel').innerHTML = trossos.join(' — ');
+    // El que va escriure ella. Fins ara només es veia si aquell dia havia
+    // declarat una molèstia, i la resta es quedava al full sense llegir.
+    const seus = (d.comentaris || [])
+      .map((c) => '<span class="diu"><b>' + esc(MOMENTS[c.moment] || c.moment) + ':</b> ' +
+                  esc(c.text) + '</span>').join('');
+
+    $('#detall-cel').innerHTML =
+      '<span class="info">' + trossos.join(' — ') + '</span>' + seus +
+      '<button type="button" class="tanca" id="tanca-detall" aria-label="Tancar">×</button>';
+    $('#detall-cel').classList.remove('amagat');
+    $('#tanca-detall').addEventListener('click', amagaDetall);
     $$('#contingut td.cel.triada').forEach((x) => x.classList.remove('triada'));
     td.classList.add('triada');
   }));
 
   const vesSetmana = (n) => {
+    amagaDetall();
     panell = null;
     setmanaPanell = sumaDies(setmanaPanell, n);
     pintaPanell();
@@ -1803,6 +1827,19 @@ function pintaFitxa(id) {
       serie('carrega', 'Càrrega setmanal', sostre) +
       serie('fatiga', 'Cansament mitjà (1–5)', 5) +
       serie('son', 'Son mitjà (1–5)', 5) +
+
+      (d.comentaris && d.comentaris.length
+        ? '<div class="card">' +
+            '<div class="eyebrow">El que ha escrit ella</div>' +
+            d.comentaris.map((c) =>
+              '<div style="padding:8px 0; border-bottom:1px solid var(--line)">' +
+                '<b>' + esc(formatDia(c.data)) + '</b> · ' +
+                esc(MOMENTS[c.moment] || c.moment) +
+                (c.te_molestia ? ' · <span style="color:var(--avis)">amb molèstia</span>' : '') +
+                '<br><span class="meta">' + esc(c.text) + '</span>' +
+              '</div>').join('') +
+          '</div>'
+        : '') +
 
       '<div class="card">' +
         '<div class="eyebrow">Molèsties registrades</div>' +

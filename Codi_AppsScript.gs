@@ -1114,6 +1114,16 @@ function getPanell_(equip, dilluns, usuari) {
       // La molestia pot venir del formulari d'abans o del de partit.
       var mol = (a && a.te_molestia) ? a : ((pt && pt.te_molestia) ? pt : null);
 
+      /* El que ha escrit ella. Fins ara nomes es veia si aquell dia havia
+         declarat una molestia; la resta es quedava al full sense llegir. */
+      var comentaris = [];
+      [['abans', a], ['despres', p], ['partit', pt]].forEach(function (parell) {
+        var r = parell[1];
+        if (r && text_(r.comentari)) {
+          comentaris.push({ moment: parell[0], text: text_(r.comentari) });
+        }
+      });
+
       return {
         data: d,
         carrega: carrega,
@@ -1131,7 +1141,8 @@ function getPanell_(equip, dilluns, usuari) {
         te_abans: !!a,
         te_despres: !!p,
         te_partit: !!pt,
-        carrega_partit: pt ? (Number(pt.carrega) || 0) : null
+        carrega_partit: pt ? (Number(pt.carrega) || 0) : null,
+        comentaris: comentaris
       };
     });
 
@@ -1225,10 +1236,22 @@ function getJugadoraStaff_(id, nSetmanes, usuari) {
       return { data: r.data, zona: r.zona_molestia, dolor: r.dolor, limita: r.limita, comentari: r.comentari };
     });
 
+  /* Tot el que ha escrit, amb molestia o sense. Es el lloc on una jugadora
+     pot dir una cosa important que no cap a cap casella. */
+  var comentaris = regs
+    .filter(function (r) { return text_(r.comentari); })
+    .sort(function (a, b) { return b.data.localeCompare(a.data); })
+    .slice(0, 30)
+    .map(function (r) {
+      return { data: r.data, moment: r.moment, text: text_(r.comentari),
+               te_molestia: !!r.te_molestia };
+    });
+
   // Sense el codi: es el que fa servir per entrar i no ha de viatjar mai.
   var fitxa = { id: j.id, nom: j.nom, dorsal: j.dorsal, equip: j.equip,
                 equips: j.equips, activa: j.activa };
-  return json_({ ok: true, data: { jugadora: fitxa, setmanes: setmanes, molesties: molesties } });
+  return json_({ ok: true, data: { jugadora: fitxa, setmanes: setmanes,
+                                   molesties: molesties, comentaris: comentaris } });
 }
 
 /* ------------------------------------------------------------------ *
