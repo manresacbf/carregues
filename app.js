@@ -1913,7 +1913,8 @@ const PERIODES = [
 function pintaInformes() {
   if (!esStaff()) { ves('#/inici'); return; }
   if (!esDirector() || !CONFIG.API_INFORMES) { ves('#/panell'); return; }
-  $('#titol').textContent = 'Generar informes';
+  // Curt a posta: la barra retalla els títols llargs amb punts suspensius.
+  $('#titol').textContent = 'Informes';
 
   if (!equipsInformes) {
     $('#contingut').innerHTML = '<p class="buit">Carregant…</p>';
@@ -1943,21 +1944,28 @@ function pintaInformes() {
   $('#contingut').innerHTML =
     '<div class="card">' +
       '<div class="eyebrow">Equip</div>' +
-      '<div class="filtres-equip">' + xips + '</div>' +
+      // Aquí no poden quedar amagats a la dreta: triar l'equip és obligatori.
+      '<div class="filtres-equip" style="flex-wrap:wrap">' + xips + '</div>' +
       '<div class="eyebrow" style="margin-top:14px">Període</div>' +
       '<div class="camp" style="margin-bottom:0">' +
         '<select id="periode-inf">' + opcions + '</select>' +
       '</div>' +
     '</div>' +
 
-    '<button type="button" class="btn" id="fes-families"' + (equipInforme ? '' : ' disabled') +
-      '>Informes per a les famílies</button>' +
-    '<p class="meta" style="margin:-4px 0 14px">Un PDF per jugadora, per enviar a casa. ' +
+    (equipInforme
+      ? ''
+      : '<p class="meta" style="margin:0 0 12px">Tria un equip per continuar.</p>') +
+
+    // Els dos amb el mateix pes: si un fos magenta semblaria que és l'únic
+    // que es pot tocar, i tots dos fan la mateixa feina per a públics diferents.
+    '<button type="button" class="btn secundari" id="fes-families"' +
+      (equipInforme ? '' : ' disabled') + '>Informes per a les famílies</button>' +
+    '<p class="meta" style="margin:8px 0 20px">Un PDF per jugadora, per enviar a casa. ' +
       'No hi surt res del que escriuen elles en text lliure.</p>' +
 
-    '<button type="button" class="btn secundari" id="fes-equip"' + (equipInforme ? '' : ' disabled') +
-      '>Informe per a l&#39;equip tècnic</button>' +
-    '<p class="meta" style="margin:-4px 0 14px">Un sol PDF amb alertes, càrregues i comentaris. ' +
+    '<button type="button" class="btn secundari" id="fes-equip"' +
+      (equipInforme ? '' : ' disabled') + '>Informe per a l&#39;equip tècnic</button>' +
+    '<p class="meta" style="margin:8px 0 20px">Un sol PDF amb alertes, càrregues i comentaris. ' +
       'És d&#39;ús intern.</p>' +
 
     '<div id="estat-inf"></div>' +
@@ -2004,20 +2012,24 @@ function generaInformes(accio) {
 
 function resultatInformes(accio, d) {
   if (accio === 'equip') {
-    return '<p style="margin:0">Informe de <b>' + esc(equipInforme) + '</b> (' +
-      esc(d.periode || '') + ') desat al Drive.</p>' +
-      (d.fitxer ? '<p class="meta" style="margin:6px 0 0"><a href="' + esc(d.fitxer) +
-        '" target="_blank" rel="noopener">Obrir el PDF</a></p>' : '');
+    return '<p style="margin:0 0 12px">Informe de <b>' + esc(equipInforme) + '</b> (' +
+      esc(d.periode || '') + ') desat al Drive.</p>' + enllac(d.fitxer, 'Obrir el PDF');
   }
 
-  return '<p style="margin:0"><b>' + d.fets + '</b> informes de ' + d.total +
+  return '<p style="margin:0 0 12px"><b>' + d.fets + '</b> informes de ' + d.total +
       ' jugadores del ' + esc(equipInforme) + ' (' + esc(d.periode || '') + ').</p>' +
-    (d.carpeta ? '<p class="meta" style="margin:6px 0 0"><a href="' + esc(d.carpeta) +
-      '" target="_blank" rel="noopener">Obrir la carpeta</a></p>' : '') +
+    enllac(d.carpeta, 'Obrir la carpeta al Drive') +
     ((d.sense || []).length
-      ? '<p class="meta" style="margin:8px 0 0"><b>Sense cap registre aquests dies</b> ' +
+      ? '<p class="meta" style="margin:12px 0 0"><b>Sense cap registre aquests dies</b> ' +
         '(no se&#39;ls ha fet informe):<br>' + esc(d.sense.join(', ')) + '</p>'
       : '');
+}
+
+/** Un enllaç amb cara de botó: això s'ha de poder tocar amb el dit. */
+function enllac(url, text) {
+  if (!url) return '';
+  return '<a class="btn secundari" href="' + esc(url) + '" target="_blank" rel="noopener">' +
+    esc(text) + '</a>';
 }
 
 /* ─────────────────────────────────────────────────────────────────────

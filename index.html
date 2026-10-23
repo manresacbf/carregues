@@ -79,7 +79,11 @@
   }
   .btn:active{background:var(--pink-dim);}
   .btn.secundari{background:var(--bg-alt); border:1px solid var(--line); color:var(--text);}
-  .btn[disabled]{opacity:.5;}
+  .btn[disabled]{opacity:.45;}
+  /* Un enllaç amb cara de botó: els enllaços de text queden massa petits
+     per tocar-los amb el dit, i el blau del navegador no es llegeix aquí. */
+  a{color:var(--pink);}
+  a.btn{display:flex; align-items:center; justify-content:center; text-decoration:none;}
   .camp{margin-bottom:12px;}
   .camp label{display:block; font-size:13px; color:var(--text-dim); margin-bottom:5px;}
   .camp input,.camp textarea,.camp select{
