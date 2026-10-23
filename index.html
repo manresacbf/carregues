@@ -37,7 +37,11 @@
     position:sticky; top:0; z-index:20;
     background:rgba(17,20,26,.94); backdrop-filter:blur(8px);
     border-bottom:1px solid var(--line);
-    padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+    /* L'app es dibuixa sota la barra d'estat (viewport-fit=cover), però a
+       Android env(safe-area-inset-top) sol valdre 0 encara que la barra hi
+       passi per sobre: amb 10px el títol quedava xafat. Un terra de 24px,
+       com el de la pantalla del codi. */
+    padding: max(24px, env(safe-area-inset-top)) 14px 10px;
     display:flex; align-items:center; gap:10px;
   }
   .barra h1{
