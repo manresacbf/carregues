@@ -8,7 +8,12 @@
 <link rel="manifest" href="manifest.json">
 <link rel="apple-touch-icon" href="icon-192.png">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<!-- "black-translucent" feia que el contingut comencés DARRERE la barra
+     d'estat de l'iPhone, confiant que env(safe-area-inset-top) digués quant
+     espai calia deixar. Quan aquest valor arriba a 0 (passa sovint), el
+     títol queda sota l'hora i la bateria. Amb "black" el sistema ja reserva
+     l'espai ell mateix i no hi ha res a endevinar. -->
+<meta name="apple-mobile-web-app-status-bar-style" content="black">
 <meta name="apple-mobile-web-app-title" content="Rendiment">
 <style>
   :root{
