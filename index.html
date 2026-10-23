@@ -446,7 +446,12 @@
    Enganxa aquí la URL acabada en /exec del desplegament de l'Apps
    Script. És l'únic que cal tocar per posar l'app en marxa.            */
 const CONFIG = {
-  API_URL: "https://script.google.com/macros/s/AKfycbwNqbR0s88KdbwIoUT-jp4FYPX45g0QYjKHWjJaw9Msa2Hr0vI1jHK2FCUU8egeIGWn/exec"
+  API_URL: "https://script.google.com/macros/s/AKfycbwNqbR0s88KdbwIoUT-jp4FYPX45g0QYjKHWjJaw9Msa2Hr0vI1jHK2FCUU8egeIGWn/exec",
+
+  /* El projecte dels informes és un altre, a part: així l'script de l'app no
+     necessita cap permís nou de Drive. Si es deixa buit, el botó d'informes
+     del director no surt i la resta de l'app funciona igual. */
+  API_INFORMES: "https://script.google.com/macros/s/AKfycbz_XCb91OWrANq6me5FoMbdO96aDoMdNsby_jjCuBMSKgYWZ-PLU10kH7pYWYnkjJbt5Q/exec"
 };
 </script>
 <script src="app.js"></script>

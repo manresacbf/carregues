@@ -206,6 +206,34 @@ async function api(action, extra, intents) {
   throw ultim || new Error('Sense connexió');
 }
 
+/**
+ * Els informes viuen en un altre projecte d'Apps Script, amb la seva pròpia
+ * adreça: així el full de l'app no necessita cap permís nou de Drive.
+ *
+ * Aquí no hi ha reintents ni el límit curt de la resta: generar vint PDF
+ * passa del minut. Si es talla, tornar-hi no fa mal, perquè cada informe
+ * substitueix el que hi havia amb el mateix nom.
+ */
+async function apiInformes(accio, extra) {
+  if (!CONFIG.API_INFORMES) throw new Error("Falta configurar API_INFORMES");
+  const ctrl = new AbortController();
+  const rellotge = setTimeout(() => ctrl.abort(), 6 * 60 * 1000);
+  try {
+    const res = await fetch(CONFIG.API_INFORMES, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },  // evita el preflight CORS
+      body: JSON.stringify(Object.assign({ accio: accio, codi: sessio.codi }, extra || {})),
+      signal: ctrl.signal
+    });
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    const dades = await res.json();
+    if (dades && dades.ok === false) throw new Error(dades.error || 'Error');
+    return dades.data || {};
+  } finally {
+    clearTimeout(rellotge);
+  }
+}
+
 /* ─────────────────────────────────────────────────────────────────────
    5. CUA I REGISTRES PROPIS
    ───────────────────────────────────────────────────────────────────── */
@@ -441,7 +469,7 @@ function obreApp(hash) {
   ruta();
 }
 
-const VISTES_STAFF = ['panell', 'fitxa', 'partit-staff', 'entreno-staff', 'resum-partits'];
+const VISTES_STAFF = ['panell', 'fitxa', 'partit-staff', 'entreno-staff', 'resum-partits', 'informes'];
 
 function ruta() {
   if (!sessio.codi) { pintaEntrada(); return; }
@@ -468,6 +496,7 @@ function ruta() {
   else if (r.vista === 'partit-staff') pintaPartitStaff();
   else if (r.vista === 'entreno-staff') pintaEntrenoStaff();
   else if (r.vista === 'resum-partits') pintaResumPartits();
+  else if (r.vista === 'informes') pintaInformes();
   else pintaInici();
 
   window.scrollTo(0, 0);
@@ -1222,7 +1251,10 @@ function pintaPanell() {
     // i el resum de partits és només seu.
     '<div class="accions-staff">' +
       (esDirector()
-        ? '<button type="button" class="btn secundari" id="ves-resum">📊 Resum de sessions</button>'
+        ? '<button type="button" class="btn secundari" id="ves-resum">📊 Resum de sessions</button>' +
+          (CONFIG.API_INFORMES
+            ? '<button type="button" class="btn secundari" id="ves-informes">📄 Generar informes</button>'
+            : '')
         : '<button type="button" class="btn secundari" id="ves-partit">🏀 Dia de partit</button>' +
           '<button type="button" class="btn secundari" id="ves-entreno">🏋️ Dia d&#39;entrenament</button>') +
     '</div>' +
@@ -1262,6 +1294,7 @@ function pintaPanell() {
   if ($('#ves-partit')) $('#ves-partit').addEventListener('click', () => ves('#/partit-staff'));
   if ($('#ves-entreno')) $('#ves-entreno').addEventListener('click', () => ves('#/entreno-staff'));
   if ($('#ves-resum')) $('#ves-resum').addEventListener('click', () => { resum = null; ves('#/resum-partits'); });
+  if ($('#ves-informes')) $('#ves-informes').addEventListener('click', () => ves('#/informes'));
 
   $$('#contingut [data-equip]').forEach((b) => b.addEventListener('click', () => {
     amagaDetall();
@@ -1859,8 +1892,136 @@ function pintaFitxa(id) {
   });
 }
 
+/* ──────────────────────────────────────────────────────────────────
+   15. GENERAR INFORMES
+   ────────────────────────────────────────────────────────────────── *
+   Només el director. La comprovació de debò no és aquesta: la fa el
+   projecte dels informes contra la pestanya Usuaris. Amagar un botó no
+   protegeix res.                                                        */
+
+let equipsInformes = null;
+let equipInforme = '';
+let periodeInforme = 'ultims';
+let treballant = false;
+
+const PERIODES = [
+  ['ultims', 'Els últims 30 dies'],
+  ['mes', 'Aquest mes, fins avui'],
+  ['mesanterior', 'El mes passat sencer']
+];
+
+function pintaInformes() {
+  if (!esStaff()) { ves('#/inici'); return; }
+  if (!esDirector() || !CONFIG.API_INFORMES) { ves('#/panell'); return; }
+  $('#titol').textContent = 'Generar informes';
+
+  if (!equipsInformes) {
+    $('#contingut').innerHTML = '<p class="buit">Carregant…</p>';
+    apiInformes('equips', {})
+      .then((d) => {
+        if (rutaActual().vista !== 'informes') return;
+        equipsInformes = d.equips || [];
+        pintaInformes();
+      })
+      .catch((e) => {
+        if (rutaActual().vista !== 'informes') return;
+        if (String(e && e.message) === 'CODI') { codiCaducat(); return; }
+        $('#contingut').innerHTML = '<p class="buit">No s&#39;ha pogut connectar: ' +
+          esc(String(e && e.message ? e.message : e)) + '</p>';
+      });
+    return;
+  }
+
+  const xips = equipsInformes.map((e) =>
+    '<button type="button" class="chip" data-eq="' + esc(e) + '"' +
+      ' aria-pressed="' + (equipInforme === e) + '">' + esc(e) + '</button>').join('');
+
+  const opcions = PERIODES.map((p) =>
+    '<option value="' + p[0] + '"' + (periodeInforme === p[0] ? ' selected' : '') + '>' +
+      esc(p[1]) + '</option>').join('');
+
+  $('#contingut').innerHTML =
+    '<div class="card">' +
+      '<div class="eyebrow">Equip</div>' +
+      '<div class="filtres-equip">' + xips + '</div>' +
+      '<div class="eyebrow" style="margin-top:14px">Període</div>' +
+      '<div class="camp" style="margin-bottom:0">' +
+        '<select id="periode-inf">' + opcions + '</select>' +
+      '</div>' +
+    '</div>' +
+
+    '<button type="button" class="btn" id="fes-families"' + (equipInforme ? '' : ' disabled') +
+      '>Informes per a les famílies</button>' +
+    '<p class="meta" style="margin:-4px 0 14px">Un PDF per jugadora, per enviar a casa. ' +
+      'No hi surt res del que escriuen elles en text lliure.</p>' +
+
+    '<button type="button" class="btn secundari" id="fes-equip"' + (equipInforme ? '' : ' disabled') +
+      '>Informe per a l&#39;equip tècnic</button>' +
+    '<p class="meta" style="margin:-4px 0 14px">Un sol PDF amb alertes, càrregues i comentaris. ' +
+      'És d&#39;ús intern.</p>' +
+
+    '<div id="estat-inf"></div>' +
+    '<button class="btn secundari" id="torna-panell">Tornar al panell</button>';
+
+  $$('#contingut [data-eq]').forEach((b) => b.addEventListener('click', () => {
+    equipInforme = b.getAttribute('data-eq');
+    pintaInformes();
+  }));
+  $('#periode-inf').addEventListener('change', (ev) => { periodeInforme = ev.target.value; });
+  $('#fes-families').addEventListener('click', () => generaInformes('families'));
+  $('#fes-equip').addEventListener('click', () => generaInformes('equip'));
+  $('#torna-panell').addEventListener('click', () => ves('#/panell'));
+}
+
+function generaInformes(accio) {
+  if (treballant || !equipInforme) return;
+  treballant = true;
+  $$('#contingut button').forEach((b) => { b.disabled = true; });
+
+  $('#estat-inf').innerHTML = '<div class="card"><p style="margin:0">Generant…</p>' +
+    '<p class="meta" style="margin:6px 0 0">Sol trigar entre mig minut i un minut. Deixa la ' +
+    'pantalla oberta. Si es talla, pots tornar-hi: els informes se substitueixen, no es dupliquen.</p></div>';
+
+  apiInformes(accio, { equip: equipInforme, periode: periodeInforme })
+    .then((d) => {
+      if (rutaActual().vista !== 'informes') return;
+      $('#estat-inf').innerHTML = '<div class="card">' +
+        '<div class="eyebrow">Fet</div>' + resultatInformes(accio, d) + '</div>';
+    })
+    .catch((e) => {
+      if (rutaActual().vista !== 'informes') return;
+      if (String(e && e.message) === 'CODI') { codiCaducat(); return; }
+      $('#estat-inf').innerHTML = '<div class="card"><p style="margin:0;color:var(--avis)">' +
+        'No ha anat: ' + esc(String(e && e.message ? e.message : e)) + '</p></div>';
+    })
+    .then(() => {
+      treballant = false;
+      if (rutaActual().vista === 'informes') {
+        $$('#contingut button').forEach((b) => { b.disabled = false; });
+      }
+    });
+}
+
+function resultatInformes(accio, d) {
+  if (accio === 'equip') {
+    return '<p style="margin:0">Informe de <b>' + esc(equipInforme) + '</b> (' +
+      esc(d.periode || '') + ') desat al Drive.</p>' +
+      (d.fitxer ? '<p class="meta" style="margin:6px 0 0"><a href="' + esc(d.fitxer) +
+        '" target="_blank" rel="noopener">Obrir el PDF</a></p>' : '');
+  }
+
+  return '<p style="margin:0"><b>' + d.fets + '</b> informes de ' + d.total +
+      ' jugadores del ' + esc(equipInforme) + ' (' + esc(d.periode || '') + ').</p>' +
+    (d.carpeta ? '<p class="meta" style="margin:6px 0 0"><a href="' + esc(d.carpeta) +
+      '" target="_blank" rel="noopener">Obrir la carpeta</a></p>' : '') +
+    ((d.sense || []).length
+      ? '<p class="meta" style="margin:8px 0 0"><b>Sense cap registre aquests dies</b> ' +
+        '(no se&#39;ls ha fet informe):<br>' + esc(d.sense.join(', ')) + '</p>'
+      : '');
+}
+
 /* ─────────────────────────────────────────────────────────────────────
-   15. ARRENCADA
+   16. ARRENCADA
    ───────────────────────────────────────────────────────────────────── */
 
 async function arrenca() {
