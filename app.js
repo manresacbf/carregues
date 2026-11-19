@@ -669,6 +669,63 @@ function triat(sel) {
   return b ? Number(b.getAttribute('data-valor')) : null;
 }
 
+/* ─────────────── De quin dia són les dades ───────────────
+   Fins ara sempre s'escrivia el dia d'avui. Qui entrena a les 21:30 i
+   omple el formulari a les 00:20 escrivia el dia següent sense saber-ho,
+   i aquell registre deixava de comptar com a resposta del dia d'entrenament. */
+
+const DIES_ENRERE = 3;                 // avui i els dos dies anteriors
+const ETIQUETES_DIA = ['Avui', 'Ahir', 'Abans-d\u2019ahir'];
+let diaRegistre = '';
+
+/** De matinada, la sessió que compta és la que acaba de plegar. */
+function diaPerDefecte() {
+  return new Date().getHours() < 5 ? sumaDies(avuiISO(), -1) : avuiISO();
+}
+
+/** El dia triat, o el de per defecte si no val (app oberta des d'ahir). */
+function diaTriat() {
+  const permesos = [];
+  for (let n = 0; n < DIES_ENRERE; n++) permesos.push(sumaDies(avuiISO(), -n));
+  if (permesos.indexOf(diaRegistre) === -1) diaRegistre = diaPerDefecte();
+  return diaRegistre;
+}
+
+/* Una sola linia, com el camp "Dia" que ja fan servir els entrenadors.
+   Nomes tres opcions i cap data endavant: un registre amb data futura
+   desquadraria el panell i el calcul de carrega. */
+function blocDia() {
+  const tria = diaTriat();
+  const esAvui = tria === avuiISO();
+  let opcions = '';
+  for (let n = 0; n < DIES_ENRERE; n++) {
+    const d = sumaDies(avuiISO(), -n);
+    opcions += '<option value="' + d + '"' + (tria === d ? ' selected' : '') + '>' +
+      ETIQUETES_DIA[n] + ' · ' + esc(diaCurt(d)) + ' ' + esc(formatDia(d)) + '</option>';
+  }
+  return '<div class="card' + (esAvui ? '' : ' altre-dia') + '">' +
+      '<div class="camp" style="margin:0">' +
+        '<label for="dia-reg">De quin dia són les dades</label>' +
+        '<select id="dia-reg">' + opcions + '</select>' +
+      '</div>' +
+      (esAvui ? ''
+              : '<p class="avis-dia">Estàs entrant dades d’un altre dia.</p>') +
+    '</div>';
+}
+
+function enganxaDia(repinta) {
+  const sel = $('#dia-reg');
+  if (sel) sel.addEventListener('change', () => { diaRegistre = sel.value; repinta(); });
+}
+
+
+/** «Ja has contestat»: avui, o el dia que sigui. */
+function avisPrevi(dia) {
+  const quan = dia === avuiISO() ? 'Avui' : diaCurt(dia) + ' ' + formatDia(dia);
+  return '<p class="meta" style="text-align:center;margin-top:9px">' + esc(quan) +
+    ' ja has contestat: si envies, s\'actualitza.</p>';
+}
+
 function blocComentari(text) {
   return '<div class="card"><div class="camp" style="margin:0">' +
     '<label for="comentari">' + text + '</label>' +
@@ -677,10 +734,12 @@ function blocComentari(text) {
 
 function pintaAbans() {
   $('#titol').textContent = 'Abans';
-  const previ = registreDe(avuiISO(), 'abans');
+  const dia = diaTriat();
+  const previ = registreDe(dia, 'abans');
   zonaTriada = '';
 
   $('#contingut').innerHTML =
+    blocDia() +
     '<div class="card">' +
       blocEscala('son', 'Com has dormit?', ESC_SON) +
       blocEscala('fatiga', 'Com estàs de cansada?', ESC_FATIGA) +
@@ -689,8 +748,9 @@ function pintaAbans() {
     '</div>' +
     blocComentari('Vols afegir alguna cosa? (opcional)') +
     '<button class="btn" id="desa">' + (previ ? 'Actualitzar' : 'Enviar') + '</button>' +
-    (previ ? '<p class="meta" style="text-align:center;margin-top:9px">Avui ja has contestat: si envies, s\'actualitza.</p>' : '');
+    (previ ? avisPrevi(dia) : '');
 
+  enganxaDia(pintaAbans);
   ['son', 'fatiga', 'anim'].forEach((k) => enganxaUnicaTria('[data-escala="' + k + '"]'));
   enganxaMolestia();
 
@@ -716,7 +776,7 @@ function pintaAbans() {
     if (!mol.contestada) { avisa('Digues si tens alguna molèstia', true); return; }
 
     encua(Object.assign({
-      id: uuid(), data: avuiISO(), moment: 'abans',
+      id: uuid(), data: dia, moment: 'abans',
       son: son, fatiga: fatiga, anim: anim,
       comentari: $('#comentari').value.trim(),
       timestamp: new Date().toISOString()
@@ -747,16 +807,20 @@ function blocTipusSessio(triat) {
 
 function pintaDespres() {
   $('#titol').textContent = 'Després';
-  const previ = registreDe(avuiISO(), 'despres');
+  const dia = diaTriat();
+  const previ = registreDe(dia, 'despres');
 
   $('#contingut').innerHTML =
+    blocDia() +
     '<div class="card">' +
       blocTipusSessio(previ ? previ.tipus_sessio : '') +
       blocEscala('duresa', 'Com de dura ha estat?', ESC_DURESA) +
     '</div>' +
     blocComentari('Vols afegir alguna cosa? (opcional)') +
     '<button class="btn" id="desa">' + (previ ? 'Actualitzar' : 'Enviar') + '</button>' +
-    (previ ? '<p class="meta" style="text-align:center;margin-top:9px">Avui ja has contestat: si envies, s\'actualitza.</p>' : '');
+    (previ ? avisPrevi(dia) : '');
+
+  enganxaDia(pintaDespres);
 
   enganxaUnicaTria('#tipus-sessio');
   enganxaUnicaTria('[data-escala="duresa"]');
@@ -775,7 +839,7 @@ function pintaDespres() {
 
     const minuts = Number(botoTipus.getAttribute('data-minuts'));
     encua({
-      id: uuid(), data: avuiISO(), moment: 'despres',
+      id: uuid(), data: dia, moment: 'despres',
       duresa: duresa,                      // ja en escala 0-10
       tipus_sessio: botoTipus.getAttribute('data-valor'),
       minuts: minuts,
@@ -794,10 +858,12 @@ function pintaDespres() {
 
 function pintaPartit() {
   $('#titol').textContent = 'Partit';
-  const previ = registreDe(avuiISO(), 'partit');
+  const dia = diaTriat();
+  const previ = registreDe(dia, 'partit');
   zonaTriada = '';
 
   $('#contingut').innerHTML =
+    blocDia() +
     '<div class="card">' +
       blocEscala('valoracio', 'Com ha anat el partit?', ESC_COM_HA_ANAT) +
       blocEscala('duresa', 'Com de dur ha estat?', ESC_DURESA_PARTIT) +
@@ -805,10 +871,11 @@ function pintaPartit() {
     '</div>' +
     blocComentari('Com ha anat? (opcional)') +
     '<button class="btn" id="desa">' + (previ ? 'Actualitzar' : 'Enviar') + '</button>' +
-    '<p class="meta" style="text-align:center;margin-top:9px">' +
-      (previ ? 'Avui ja has contestat: si envies, s\'actualitza.'
-             : 'Els minuts que has jugat els posa el teu entrenador/a.') + '</p>';
+    (previ ? avisPrevi(dia)
+           : '<p class="meta" style="text-align:center;margin-top:9px">' +
+             'Els minuts que has jugat els posa el teu entrenador/a.</p>');
 
+  enganxaDia(pintaPartit);
   enganxaUnicaTria('[data-escala="valoracio"]');
   enganxaUnicaTria('[data-escala="duresa"]');
   enganxaMolestia();
@@ -833,7 +900,7 @@ function pintaPartit() {
     if (!mol.contestada) { avisa('Digues si tens alguna molèstia', true); return; }
 
     encua(Object.assign({
-      id: uuid(), data: avuiISO(), moment: 'partit',
+      id: uuid(), data: dia, moment: 'partit',
       valoracio: valoracio,
       duresa: duresa,
       comentari: $('#comentari').value.trim(),

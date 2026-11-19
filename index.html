@@ -267,6 +267,10 @@
   }
   details.plegable[open] summary::after{transform:rotate(-90deg);}
 
+  /* Quan les dades no són d'avui, que es vegi sense haver-ho de llegir. */
+  .card.altre-dia{border-color:var(--avis);}
+  .avis-dia{margin:9px 0 0; font-size:13.5px; color:var(--avis);}
+
   .filtres-equip{display:flex; gap:6px; overflow-x:auto; padding:2px 0 10px; scrollbar-width:none;}
   .filtres-equip::-webkit-scrollbar{display:none;}
   table.graella th.dia-entreno{color:var(--text);}
