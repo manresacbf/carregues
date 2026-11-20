@@ -69,6 +69,11 @@ const ESC_COM_HA_ANAT = [
 
 const DIES_CURT = ['dl', 'dm', 'dc', 'dj', 'dv', 'ds', 'dg'];
 
+/* La versio que s'esta executant. Ha de coincidir amb VERSIO del
+   service-worker.js: es l'unica manera de saber, des del telefon, si l'app
+   ja s'ha refrescat. */
+const VERSIO_APP = 'v37';
+
 const CLAUS = {
   sessio: 'carregues.sessio',
   meus: 'carregues.meus',
@@ -2222,9 +2227,35 @@ function pintaInformesEquip() {
               'Obrir l&rsquo;informe</button>' +
             '<p class="meta avis-inf amagat" style="margin:10px 0 0"></p>' +
           '</div>').join('')
-      : '<p class="buit">Encara no n&#39;hi ha cap de generat.</p>');
+      : '<p class="buit">Encara no n&#39;hi ha cap de generat.</p>') +
+    diagnostic();
 
   enganxaBaixades();
+}
+
+
+/**
+ * Que sap fer aquest mobil.
+ *
+ * Es temporal, i nomes surt a la pantalla de l'staff. Serveix per saber per
+ * que un telefon concret no ensenya el boto de desar: canShare diu que no
+ * tant si el navegador no sap compartir fitxers com si no li agrada aquell
+ * fitxer, i des de fora no es distingeix. Tambe diu la versio, que si no
+ * no hi ha manera de saber si l'app ja s'ha refrescat.
+ */
+function diagnostic() {
+  let potFitxers = '-';
+  try {
+    const f = new File([new Uint8Array([37, 80, 68, 70])], 'prova.pdf', { type: 'application/pdf' });
+    potFitxers = navigator.canShare ? String(navigator.canShare({ files: [f] })) : 'sense canShare';
+  } catch (e) {
+    potFitxers = 'error: ' + (e && e.message ? e.message : e);
+  }
+  return '<p class="meta" style="margin-top:18px; opacity:.6; font-size:11px">' +
+    esc(VERSIO_APP) + ' &middot; share: ' + (navigator.share ? 'si' : 'no') +
+    ' &middot; fitxers: ' + esc(potFitxers) +
+    ' &middot; instal&middot;lada: ' + (navigator.standalone ? 'si' : 'no') +
+    '</p>';
 }
 
 
@@ -2281,7 +2312,9 @@ async function baixaInforme(boto) {
       desa.style.marginTop = '8px';
       desa.textContent = 'Desar o enviar';
       desa.addEventListener('click', () => {
-        navigator.share({ files: [fitxer], title: nom }).catch(() => {});
+        // Sense títol ni text: Safari només accepta el fitxer sol, i amb
+        // res més al costat la crida pot fallar.
+        navigator.share({ files: [fitxer] }).catch(() => {});
       });
       a.parentNode.insertBefore(desa, a.nextSibling);
     }
@@ -2290,7 +2323,11 @@ async function baixaInforme(boto) {
       (potDesar
         ? ' Per desar-lo al m&ograve;bil o enviar-lo, fes servir <b>Desar o enviar</b>: ' +
           'el bot&oacute; de compartir del visor nom&eacute;s comparteix l&rsquo;enlla&ccedil;.'
-        : '');
+        // Sense compartir fitxers no es pot fer res des d'aqui, pero des del
+        // visor si: val mes dir-ho que deixar-ho estar.
+        : ' Per desar-lo, obre&rsquo;l i, al bot&oacute; de compartir, tria ' +
+          '<b>Desa a Arxius</b>. Enviar-lo des d&rsquo;all&agrave; no funciona: ' +
+          'nom&eacute;s enviaria l&rsquo;enlla&ccedil;.');
     avis.classList.remove('amagat');
     a.click();
   } catch (e) {
