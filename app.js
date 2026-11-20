@@ -476,7 +476,8 @@ function obreApp(hash) {
   ruta();
 }
 
-const VISTES_STAFF = ['panell', 'fitxa', 'partit-staff', 'entreno-staff', 'resum-partits', 'informes'];
+const VISTES_STAFF = ['panell', 'fitxa', 'partit-staff', 'entreno-staff', 'resum-partits',
+                      'informes', 'informes-equip'];
 
 function ruta() {
   if (!sessio.codi) { pintaEntrada(); return; }
