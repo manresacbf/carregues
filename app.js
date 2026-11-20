@@ -73,7 +73,9 @@ const CLAUS = {
   sessio: 'carregues.sessio',
   meus: 'carregues.meus',
   pendents: 'carregues.pendents',
-  panell: 'carregues.panell'
+  panell: 'carregues.panell',
+  informes: 'carregues.informes',
+  informesEquip: 'carregues.informes-equip'
 };
 
 /* ─────────────────────────────────────────────────────────────────────
@@ -444,8 +446,13 @@ function surtDeTot() {
   resum = null;
   equipResum = '';
   guardaMeus();
+  meusInformes = null;
+  informesEquip = null;
+  demanats = {};
   localStorage.removeItem(CLAUS.sessio);
   localStorage.removeItem(CLAUS.panell);
+  localStorage.removeItem(CLAUS.informes);
+  localStorage.removeItem(CLAUS.informesEquip);
   location.hash = '';
   pintaEntrada();
 }
@@ -497,6 +504,8 @@ function ruta() {
   else if (r.vista === 'entreno-staff') pintaEntrenoStaff();
   else if (r.vista === 'resum-partits') pintaResumPartits();
   else if (r.vista === 'informes') pintaInformes();
+  else if (r.vista === 'elmeuinforme') pintaElMeuInforme();
+  else if (r.vista === 'informes-equip') pintaInformesEquip();
   else pintaInici();
 
   window.scrollTo(0, 0);
@@ -508,6 +517,9 @@ function ruta() {
 
 function pintaInici() {
   $('#titol').textContent = 'Rendiment';
+  // La copia de l'ultima vegada, per no haver d'esperar el full: la rajola
+  // ja hi es en obrir, i es refresca sola quan arriba la resposta.
+  if (meusInformes === null) meusInformes = informesDeCopia(CLAUS.informes);
   const avui = avuiISO();
   const fet = (moment) => !!registreDe(avui, moment);
 
@@ -527,12 +539,22 @@ function pintaInici() {
     rajola('#/despres', '🌙', 'Després de l\'entrenament', 'Com ha anat la sessió?', fet('despres')) +
     rajola('#/partit', '🏀', 'Dia de partit', 'Com ha anat el partit?', fet('partit')) +
     rajola('#/resum', '📈', 'El meu resum', 'La teva setmana i la teva càrrega', false) +
+    // Només si n'hi ha cap: una rajola que porta a una pantalla buida fa
+    // pensar que l'app s'ha espatllat.
+    (meusInformes && meusInformes.length
+      ? rajola('#/elmeuinforme', '📄', 'El meu informe',
+               meusInformes.length === 1 ? 'L&#39;informe que t&#39;han preparat'
+                                         : meusInformes.length + ' informes preparats', false)
+      : '') +
 
     '<p class="meta" style="text-align:center; margin-top:22px">' +
       '<button type="button" class="chip" id="surt" style="min-height:34px">Sortir</button>' +
     '</p>';
 
   $$('#contingut [data-ves]').forEach((b) => b.addEventListener('click', () => ves(b.getAttribute('data-ves'))));
+  // Es demana un sol cop per obertura, i sense fer esperar: la pantalla ja
+  // esta pintada i la rajola hi apareix quan arriba la resposta.
+  demanaInformes('meusInformes', CLAUS.informes, (l) => { meusInformes = l; });
   $('#surt').addEventListener('click', () => {
     if (pendents.length && !confirm('Encara queda alguna cosa per enviar. Segur que vols sortir?')) return;
     surtDeTot();
@@ -1140,6 +1162,7 @@ function pintaPanell() {
     return;
   }
 
+  if (informesEquip === null) informesEquip = informesDeCopia(CLAUS.informesEquip);
   const equips = equipsDelPanell();
   // Un filtre heretat d'una altra sessio deixaria la graella buida sense
   // manera de treure'l: un entrenador d'un sol equip no veu els xips.
@@ -1324,6 +1347,9 @@ function pintaPanell() {
             : '')
         : '<button type="button" class="btn secundari" id="ves-partit">🏀 Dia de partit</button>' +
           '<button type="button" class="btn secundari" id="ves-entreno">🏋️ Dia d&#39;entrenament</button>') +
+      (informesEquip && informesEquip.length
+        ? '<button type="button" class="btn secundari" id="ves-inf-equip">📄 Informes de l&#39;equip</button>'
+        : '') +
     '</div>' +
 
     '<div class="card">' +
@@ -1362,6 +1388,8 @@ function pintaPanell() {
   if ($('#ves-entreno')) $('#ves-entreno').addEventListener('click', () => ves('#/entreno-staff'));
   if ($('#ves-resum')) $('#ves-resum').addEventListener('click', () => { resum = null; ves('#/resum-partits'); });
   if ($('#ves-informes')) $('#ves-informes').addEventListener('click', () => ves('#/informes'));
+  if ($('#ves-inf-equip')) $('#ves-inf-equip').addEventListener('click', () => ves('#/informes-equip'));
+  demanaInformes('informesEquip', CLAUS.informesEquip, (l) => { informesEquip = l; });
 
   $$('#contingut [data-equip]').forEach((b) => b.addEventListener('click', () => {
     amagaDetall();
@@ -2093,6 +2121,175 @@ function resultatInformes(accio, d) {
 }
 
 /** Un enllaç amb cara de botó: això s'ha de poder tocar amb el dit. */
+/* ─────────────────────────────────────────────────────────────────────
+   15 bis. ELS INFORMES, A QUI SON
+   ─────────────────────────────────────────────────────────────────────
+
+   La jugadora veu els seus i l'entrenador els del seu equip, cadascú amb el
+   codi amb què ja ha entrat. Qui pot veure què es decideix al full, no aquí:
+   amagar un botó no protegeix res.
+
+   Mentre els interruptors del Config estiguin apagats, el full torna una
+   llista buida i no apareix res enlloc. */
+
+let meusInformes = null;      // null = encara no s'ha demanat mai
+let informesEquip = null;
+let demanats = {};
+
+/**
+ * Demana la llista un sol cop per obertura de l'app, sense fer esperar
+ * ningú: es pinta el que hi ha a la còpia i, quan arriba la resposta, es
+ * repinta. Si falla, no es diu res: una pantalla que no hi havia de ser no
+ * ha de treure cap error.
+ */
+function demanaInformes(accio, clau, desa) {
+  if (!CONFIG.API_INFORMES) return;
+  const vista = rutaActual().vista;
+  if (demanats[accio]) return;
+  demanats[accio] = true;
+
+  apiInformes(accio, {})
+    .then((d) => {
+      const llista = (d && d.actiu) ? (d.informes || []) : [];
+      desa(llista);
+      guarda(clau, llista);
+      if (rutaActual().vista === vista) {
+        if (vista === 'inici') pintaInici();
+        else if (vista === 'panell') pintaPanell();
+      }
+    })
+    .catch(() => {});
+}
+
+/** La còpia de l'última vegada, per no haver d'esperar en tornar a obrir. */
+function informesDeCopia(clau) {
+  const l = llegeix(clau, null);
+  return Array.isArray(l) ? l : null;
+}
+
+
+function pintaElMeuInforme() {
+  if (esStaff()) { ves('#/panell'); return; }
+  $('#titol').textContent = 'El meu informe';
+
+  if (meusInformes === null) meusInformes = informesDeCopia(CLAUS.informes);
+  const l = meusInformes || [];
+
+  $('#contingut').innerHTML =
+    '<div class="card">' +
+      '<div class="eyebrow">Per a tu i per a casa</div>' +
+      '<p class="meta" style="margin:8px 0 0">Un resum del que has anat enviant: ' +
+      'com has dormit, com has arribat als entrenaments, la c&agrave;rrega que has fet i ' +
+      'les mol&egrave;sties que has dit que tenies.</p>' +
+      '<p class="meta" style="margin:8px 0 0">El que escrius als comentaris ' +
+      '<b>no hi surt</b>: aix&ograve; ho dius al cos t&egrave;cnic.</p>' +
+    '</div>' +
+    (l.length
+      ? l.map((x, i) =>
+          '<div class="card">' +
+            '<div class="eyebrow">' + (i === 0 ? 'L&rsquo;&uacute;ltim' : 'Anterior') + '</div>' +
+            '<p style="margin:6px 0 12px; font-weight:600">' + esc(x.titol || '') + '</p>' +
+            '<button type="button" class="btn secundari" data-inf="' + esc(x.id) + '">' +
+              'Obrir l&rsquo;informe</button>' +
+            '<p class="meta avis-inf amagat" style="margin:10px 0 0"></p>' +
+          '</div>').join('')
+      : '<p class="buit">Encara no te n&#39;han preparat cap.</p>');
+
+  enganxaBaixades();
+}
+
+
+function pintaInformesEquip() {
+  if (!esStaff()) { ves('#/inici'); return; }
+  $('#titol').textContent = 'Informes';
+
+  if (informesEquip === null) informesEquip = informesDeCopia(CLAUS.informesEquip);
+  const l = informesEquip || [];
+
+  $('#contingut').innerHTML =
+    '<div class="card">' +
+      '<div class="eyebrow">&Uacute;s intern</div>' +
+      '<p class="meta" style="margin:8px 0 0">Aquests informes porten el que les ' +
+      'jugadores escriuen als comentaris. No s&oacute;n per enviar a les fam&iacute;lies.</p>' +
+    '</div>' +
+    (l.length
+      ? l.map((x) =>
+          '<div class="card">' +
+            '<div class="eyebrow">' + esc(x.equip || '') + '</div>' +
+            '<p style="margin:6px 0 12px; font-weight:600">' + esc(x.titol || '') + '</p>' +
+            '<button type="button" class="btn secundari" data-inf="' + esc(x.id) + '">' +
+              'Obrir l&rsquo;informe</button>' +
+            '<p class="meta avis-inf amagat" style="margin:10px 0 0"></p>' +
+          '</div>').join('')
+      : '<p class="buit">Encara no n&#39;hi ha cap de generat.</p>');
+
+  enganxaBaixades();
+}
+
+
+function enganxaBaixades() {
+  $$('#contingut [data-inf]').forEach((b) =>
+    b.addEventListener('click', () => baixaInforme(b)));
+}
+
+
+/**
+ * Porta el PDF i el deixa a punt.
+ *
+ * El full triga uns segons a respondre, i quan arriba ja no som dins del
+ * toc de la jugadora: el navegador no es fia d'una descàrrega que no surt
+ * d'un gest seu i la pot bloquejar sense dir res. Per això el botó es
+ * converteix en un enllaç de debò, que ella toca. S'intenta obrir sol, i
+ * si el navegador no ho permet, l'enllaç es queda a la pantalla.
+ */
+async function baixaInforme(boto) {
+  const card = boto.parentNode;
+  const avis = card.querySelector('.avis-inf');
+  boto.disabled = true;
+  boto.textContent = 'Preparant\u2026';
+  avis.classList.add('amagat');
+
+  try {
+    const d = await apiInformes('baixaInforme', { id: boto.getAttribute('data-inf') });
+    const url = urlDePdf(d.pdf);
+    const nom = d.nom || 'Informe.pdf';
+
+    const a = document.createElement('a');
+    a.className = 'btn secundari';
+    a.href = url;
+    a.download = nom;
+    a.target = '_blank';
+    a.rel = 'noopener';
+    a.textContent = 'Obrir l\u2019informe';
+    card.replaceChild(a, boto);
+
+    avis.innerHTML = 'Si no s&#39;obre sol, toca <b>Obrir l&rsquo;informe</b>.';
+    avis.classList.remove('amagat');
+    a.click();
+  } catch (e) {
+    boto.disabled = false;
+    boto.textContent = 'Obrir l\u2019informe';
+    if (String(e && e.message) === 'CODI') { codiCaducat(); return; }
+    avis.textContent = 'No s\u2019ha pogut obrir: ' +
+      String(e && e.message ? e.message : e);
+    avis.classList.remove('amagat');
+  }
+}
+
+
+/** El base64 que arriba del full, convertit en una adreça que el mòbil pot obrir. */
+function urlDePdf(base64) {
+  const bin = atob(base64 || '');
+  const bytes = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  // Mitja hora de marge i fora: si no, el PDF es queda a la memòria del
+  // mòbil fins que es tanca l'app.
+  setTimeout(() => URL.revokeObjectURL(url), 30 * 60 * 1000);
+  return url;
+}
+
+
 function enllac(url, text) {
   if (!url) return '';
   return '<a class="btn secundari" href="' + esc(url) + '" target="_blank" rel="noopener">' +
