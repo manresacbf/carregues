@@ -72,7 +72,7 @@ const DIES_CURT = ['dl', 'dm', 'dc', 'dj', 'dv', 'ds', 'dg'];
 /* La versio que s'esta executant. Ha de coincidir amb VERSIO del
    service-worker.js: es l'unica manera de saber, des del telefon, si l'app
    ja s'ha refrescat. */
-const VERSIO_APP = 'v39';
+const VERSIO_APP = 'v40';
 
 const CLAUS = {
   sessio: 'carregues.sessio',
@@ -364,6 +364,7 @@ function pintaEntrada(missatge) {
   $('#vista-app').classList.add('amagat');
   $('#vista-qui').classList.remove('amagat');
   $('#codi-error').textContent = missatge || '';
+  if ($('#versio')) $('#versio').textContent = VERSIO_APP;
   const camp = $('#codi');
   camp.value = '';
   setTimeout(() => { try { camp.focus(); } catch (e) { /* res */ } }, 100);
@@ -2227,44 +2228,9 @@ function pintaInformesEquip() {
               'Obrir l&rsquo;informe</button>' +
             '<p class="meta avis-inf amagat" style="margin:10px 0 0"></p>' +
           '</div>').join('')
-      : '<p class="buit">Encara no n&#39;hi ha cap de generat.</p>') +
-    diagnostic();
+      : '<p class="buit">Encara no n&#39;hi ha cap de generat.</p>');
 
   enganxaBaixades();
-}
-
-
-/**
- * Que sap fer aquest mobil.
- *
- * Es temporal, i nomes surt a la pantalla de l'staff. Serveix per saber per
- * que un telefon concret no ensenya el boto de desar: canShare diu que no
- * tant si el navegador no sap compartir fitxers com si no li agrada aquell
- * fitxer, i des de fora no es distingeix. Tambe diu la versio, que si no
- * no hi ha manera de saber si l'app ja s'ha refrescat.
- */
-function diagnostic() {
-  const petit = new Uint8Array([37, 80, 68, 70]);
-  const gros = new Uint8Array(200000);
-  gros.set(petit);
-
-  const prova = (bytes, nom) => {
-    if (!navigator.canShare) return 'sense canShare';
-    try {
-      const f = new File([bytes], nom, { type: 'application/pdf' });
-      return navigator.canShare({ files: [f] }) ? 'si' : 'NO';
-    } catch (e) { return 'error'; }
-  };
-
-  const real = 'Informe equip U17 (ús intern).pdf';
-  return '<p class="meta" style="margin-top:18px; opacity:.6; font-size:11px">' +
-    esc(VERSIO_APP) + ' &middot; share: ' + (navigator.share ? 'si' : 'no') +
-    ' &middot; instal&middot;lada: ' + (navigator.standalone ? 'si' : 'no') +
-    '<br>nom senzill: ' + esc(prova(petit, 'prova.pdf')) +
-    ' &middot; nom real: ' + esc(prova(petit, real)) +
-    ' &middot; nom net: ' + esc(prova(petit, nomNet(real))) +
-    ' &middot; 200 kB: ' + esc(prova(gros, 'prova.pdf')) +
-    '</p>';
 }
 
 
@@ -2343,13 +2309,6 @@ async function baixaInforme(boto) {
       (potDesar
         ? ' Per desar-lo al m&ograve;bil o enviar-lo, fes servir <b>Desar o enviar</b>.'
         : ' ' + aPdf());
-    // Temporal, i nomes per a l'staff: que digui que n'opina canShare del
-    // fitxer de debo, que es l'unic que les proves no poden reproduir.
-    if (esStaff()) {
-      avis.innerHTML += '<br><span style="opacity:.55; font-size:11px">' +
-        'fitxer real: ' + (aprovat ? 'acceptat com a &ldquo;' + esc(aprovat.name) + '&rdquo;' : 'rebutjat') +
-        ' &middot; ' + bytes.length + ' bytes</span>';
-    }
     avis.classList.remove('amagat');
     a.click();
   } catch (e) {
