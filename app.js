@@ -72,7 +72,7 @@ const DIES_CURT = ['dl', 'dm', 'dc', 'dj', 'dv', 'ds', 'dg'];
 /* La versio que s'esta executant. Ha de coincidir amb VERSIO del
    service-worker.js: es l'unica manera de saber, des del telefon, si l'app
    ja s'ha refrescat. */
-const VERSIO_APP = 'v38';
+const VERSIO_APP = 'v39';
 
 const CLAUS = {
   sessio: 'carregues.sessio',
@@ -2310,10 +2310,18 @@ async function baixaInforme(boto) {
        no val res fora de l'app: ni te la pots enviar a tu mateix. Per desar
        el PDF de deb\u00f2 cal passar-li el fitxer, i aix\u00f2 el m\u00f2bil nom\u00e9s ho
        accepta dins d'un toc. Per sort el segon toc ja hi \u00e9s. */
-    const compartible = fitxerCompartible(bytes, nom);
-    const potDesar = !!compartible;
+    /* El boto surt sempre que el mobil sapiga compartir. Abans es demanava
+       permis a canShare(), i al telefon del director deia que no al fitxer
+       de debo mentre deia que si a les quatre proves: no es de fiar. Qui
+       mana de debo es la crida, i si falla ja ho direm. */
+    const potDesar = !!navigator.share;
+
+    // Si canShare accepta alguna versio del nom, aquella; si no, el de
+    // debo igualment, que la seva opinio ja hem vist que val poc.
+    const aprovat = fitxerCompartible(bytes, nom);
 
     if (potDesar) {
+      const quin = aprovat || fitxer;
       const desa = document.createElement('button');
       desa.type = 'button';
       desa.className = 'btn secundari';
@@ -2321,21 +2329,27 @@ async function baixaInforme(boto) {
       desa.textContent = 'Desar o enviar';
       desa.addEventListener('click', () => {
         // Sense títol ni text: Safari només accepta el fitxer sol, i amb
-        // res més al costat la crida pot fallar.
-        navigator.share({ files: [compartible] }).catch(() => {});
+        // res més al costat la crida pot fallar. I un sol intent: un segon
+        // ja cauria fora del toc i el mòbil tampoc no el deixaria passar.
+        navigator.share({ files: [quin] }).catch((err) => {
+          if (String(err && err.name) === 'AbortError') return;   // l'ha tancat ell
+          avis.innerHTML = aPdf();
+        });
       });
       a.parentNode.insertBefore(desa, a.nextSibling);
     }
 
     avis.innerHTML = 'Si no s&#39;obre sol, toca <b>Obrir l&rsquo;informe</b>.' +
       (potDesar
-        ? ' Per desar-lo al m&ograve;bil o enviar-lo, fes servir <b>Desar o enviar</b>: ' +
-          'el bot&oacute; de compartir del visor nom&eacute;s comparteix l&rsquo;enlla&ccedil;.'
-        // Sense compartir fitxers no es pot fer res des d'aqui, pero des del
-        // visor si: val mes dir-ho que deixar-ho estar.
-        : ' Per desar-lo, obre&rsquo;l i, al bot&oacute; de compartir, tria ' +
-          '<b>Desa a Arxius</b>. Enviar-lo des d&rsquo;all&agrave; no funciona: ' +
-          'nom&eacute;s enviaria l&rsquo;enlla&ccedil;.');
+        ? ' Per desar-lo al m&ograve;bil o enviar-lo, fes servir <b>Desar o enviar</b>.'
+        : ' ' + aPdf());
+    // Temporal, i nomes per a l'staff: que digui que n'opina canShare del
+    // fitxer de debo, que es l'unic que les proves no poden reproduir.
+    if (esStaff()) {
+      avis.innerHTML += '<br><span style="opacity:.55; font-size:11px">' +
+        'fitxer real: ' + (aprovat ? 'acceptat com a &ldquo;' + esc(aprovat.name) + '&rdquo;' : 'rebutjat') +
+        ' &middot; ' + bytes.length + ' bytes</span>';
+    }
     avis.classList.remove('amagat');
     a.click();
   } catch (e) {
@@ -2346,6 +2360,19 @@ async function baixaInforme(boto) {
       String(e && e.message ? e.message : e);
     avis.classList.remove('amagat');
   }
+}
+
+
+/**
+ * El camí de reserva, que és de l'iPhone i no nostre.
+ *
+ * Obrint l'informe i compartint-lo, l'iOS envia l'enllaç i no el PDF. Té
+ * una opció per canviar-ho, però està amagada i ningú no la trobaria sol.
+ */
+function aPdf() {
+  return 'Per desar-lo o enviar-lo des del visor, toca <b>Opcions</b> a dalt ' +
+    'del full de compartir i tria <b>PDF</b>. Si no, nom&eacute;s s&rsquo;envia ' +
+    'l&rsquo;enlla&ccedil;, que no val fora de l&rsquo;app.';
 }
 
 
