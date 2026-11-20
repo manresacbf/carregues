@@ -72,7 +72,7 @@ const DIES_CURT = ['dl', 'dm', 'dc', 'dj', 'dv', 'ds', 'dg'];
 /* La versio que s'esta executant. Ha de coincidir amb VERSIO del
    service-worker.js: es l'unica manera de saber, des del telefon, si l'app
    ja s'ha refrescat. */
-const VERSIO_APP = 'v37';
+const VERSIO_APP = 'v38';
 
 const CLAUS = {
   sessio: 'carregues.sessio',
@@ -2244,17 +2244,26 @@ function pintaInformesEquip() {
  * no hi ha manera de saber si l'app ja s'ha refrescat.
  */
 function diagnostic() {
-  let potFitxers = '-';
-  try {
-    const f = new File([new Uint8Array([37, 80, 68, 70])], 'prova.pdf', { type: 'application/pdf' });
-    potFitxers = navigator.canShare ? String(navigator.canShare({ files: [f] })) : 'sense canShare';
-  } catch (e) {
-    potFitxers = 'error: ' + (e && e.message ? e.message : e);
-  }
+  const petit = new Uint8Array([37, 80, 68, 70]);
+  const gros = new Uint8Array(200000);
+  gros.set(petit);
+
+  const prova = (bytes, nom) => {
+    if (!navigator.canShare) return 'sense canShare';
+    try {
+      const f = new File([bytes], nom, { type: 'application/pdf' });
+      return navigator.canShare({ files: [f] }) ? 'si' : 'NO';
+    } catch (e) { return 'error'; }
+  };
+
+  const real = 'Informe equip U17 (ús intern).pdf';
   return '<p class="meta" style="margin-top:18px; opacity:.6; font-size:11px">' +
     esc(VERSIO_APP) + ' &middot; share: ' + (navigator.share ? 'si' : 'no') +
-    ' &middot; fitxers: ' + esc(potFitxers) +
     ' &middot; instal&middot;lada: ' + (navigator.standalone ? 'si' : 'no') +
+    '<br>nom senzill: ' + esc(prova(petit, 'prova.pdf')) +
+    ' &middot; nom real: ' + esc(prova(petit, real)) +
+    ' &middot; nom net: ' + esc(prova(petit, nomNet(real))) +
+    ' &middot; 200 kB: ' + esc(prova(gros, 'prova.pdf')) +
     '</p>';
 }
 
@@ -2284,7 +2293,8 @@ async function baixaInforme(boto) {
   try {
     const d = await apiInformes('baixaInforme', { id: boto.getAttribute('data-inf') });
     const nom = d.nom || 'Informe.pdf';
-    const fitxer = new File([bytesDePdf(d.pdf)], nom, { type: 'application/pdf' });
+    const bytes = bytesDePdf(d.pdf);
+    const fitxer = new File([bytes], nom, { type: 'application/pdf' });
     const url = urlDePdf(fitxer);
 
     const a = document.createElement('a');
@@ -2300,10 +2310,8 @@ async function baixaInforme(boto) {
        no val res fora de l'app: ni te la pots enviar a tu mateix. Per desar
        el PDF de deb\u00f2 cal passar-li el fitxer, i aix\u00f2 el m\u00f2bil nom\u00e9s ho
        accepta dins d'un toc. Per sort el segon toc ja hi \u00e9s. */
-    let potDesar = false;
-    try {
-      potDesar = !!(navigator.canShare && navigator.canShare({ files: [fitxer] }));
-    } catch (_) { potDesar = false; }
+    const compartible = fitxerCompartible(bytes, nom);
+    const potDesar = !!compartible;
 
     if (potDesar) {
       const desa = document.createElement('button');
@@ -2314,7 +2322,7 @@ async function baixaInforme(boto) {
       desa.addEventListener('click', () => {
         // Sense títol ni text: Safari només accepta el fitxer sol, i amb
         // res més al costat la crida pot fallar.
-        navigator.share({ files: [fitxer] }).catch(() => {});
+        navigator.share({ files: [compartible] }).catch(() => {});
       });
       a.parentNode.insertBefore(desa, a.nextSibling);
     }
@@ -2338,6 +2346,36 @@ async function baixaInforme(boto) {
       String(e && e.message ? e.message : e);
     avis.classList.remove('amagat');
   }
+}
+
+
+/**
+ * El fitxer tal com el mòbil l'accepta, o null si no n'accepta cap.
+ *
+ * Safari pot dir que no a un fitxer pel nom: el de l'equip porta accent i
+ * parèntesis. Si rebutja el de debò, es torna a provar amb el nom net.
+ * Val més que la família desi un «Informe equip U17 us intern.pdf» que no
+ * pas que no pugui desar res.
+ */
+function fitxerCompartible(bytes, nom) {
+  const mira = (quin) => {
+    if (!navigator.canShare) return null;
+    try {
+      const f = new File([bytes], quin, { type: 'application/pdf' });
+      return navigator.canShare({ files: [f] }) ? f : null;
+    } catch (_) { return null; }
+  };
+  return mira(nom) || mira(nomNet(nom));
+}
+
+/** Sense accents, sense parèntesis i sense res que no sigui de tota la vida. */
+function nomNet(nom) {
+  const net = String(nom || '')
+    .normalize('NFD').replace(/[̀-ͯ]/g, '')
+    .replace(/[^A-Za-z0-9 .\-_]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  return net.length > 4 ? net : 'Informe.pdf';
 }
 
 
