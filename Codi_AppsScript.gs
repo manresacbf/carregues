@@ -129,6 +129,10 @@ var CONFIG_INICIAL = [
 
 var DIES_CODI = ['dg', 'dl', 'dm', 'dc', 'dj', 'dv', 'ds'];   // getUTCDay(): 0=diumenge
 
+/* Sessions registrades que calen cada setmana per fiar-se de la ratio.
+   Ha de coincidir amb el mateix valor de l'informe de l'equip tecnic. */
+var MIN_SESSIONS_RATIO = 3;
+
 var MAX_ERRADES = 8;
 var FINESTRA_MS = 5 * 60 * 1000;
 
@@ -915,15 +919,15 @@ function trobaRegistre_(sh, caps, idJ, data, moment) {
 
 /** Suma de carregues d'una jugadora entre dues dates (incloses). */
 function carregaEntre_(regs, idJ, desDe, finsA) {
-  var t = 0, hiHaDades = false;
+  var t = 0, n = 0;
   regs.forEach(function (r) {
     if (r.id_jugadora !== idJ) return;
     if (r.data < desDe || r.data > finsA) return;
     if (r.moment !== 'despres' && r.moment !== 'partit') return;
-    hiHaDades = true;
+    n++;
     t += Number(r.carrega) || 0;
   });
-  return { total: t, hiHaDades: hiHaDades };
+  return { total: t, sessions: n, hiHaDades: n > 0 };
 }
 
 /**
@@ -943,7 +947,11 @@ function carreguesPerSetmana_(regs) {
     var dl = dillunsDe_(r.data);
     if (!dl) return;
     var meu = index[r.id_jugadora] || (index[r.id_jugadora] = {});
-    meu[dl] = (meu[dl] || 0) + (Number(r.carrega) || 0);
+    // Tambe el nombre de sessions: sense saber-lo, la ratio acaba mesurant
+    // quants formularis ha omplert i no quant ha entrenat.
+    if (!meu[dl]) meu[dl] = { total: 0, sessions: 0 };
+    meu[dl].total += (Number(r.carrega) || 0);
+    meu[dl].sessions++;
   });
   return index;
 }
@@ -963,16 +971,25 @@ function dillunsDe_(iso) {
  */
 function ratioAmbIndex_(index, idJ, dilluns) {
   var meu = index[idJ] || {};
-  var setmana = meu[dilluns] || 0;
-  var previes = [];
+  var aquesta = meu[dilluns] || { total: 0, sessions: 0 };
+  var setmana = aquesta.total;
+
+  /* Les quatre setmanes han de tenir prou sessions registrades. Sense
+     aquesta condicio, una jugadora que passa d'un formulari a tres sembla
+     que hagi triplicat l'entrenament: surten salts de x20 que no existeixen. */
+  var finestra = [aquesta];
   for (var k = 1; k <= 3; k++) {
-    var ini = sumaDies_(dilluns, -7 * k);
-    if (meu[ini] !== undefined) previes.push(meu[ini]);
+    finestra.push(meu[sumaDies_(dilluns, -7 * k)] || null);
   }
-  if (previes.length < 3) {
-    return { carrega_setmana: setmana, mitjana_previa: null, ratio: null, motiu: 'dades insuficients' };
+  var completes = finestra.every(function (x) {
+    return x && x.sessions >= MIN_SESSIONS_RATIO;
+  });
+  if (!completes) {
+    return { carrega_setmana: setmana, mitjana_previa: null, ratio: null,
+             motiu: 'li falten sessions registrades' };
   }
-  var mitjana = (previes[0] + previes[1] + previes[2]) / 3;
+
+  var mitjana = (finestra[1].total + finestra[2].total + finestra[3].total) / 3;
   return {
     carrega_setmana: setmana,
     mitjana_previa: Math.round(mitjana),
@@ -987,15 +1004,21 @@ function ratioAmbIndex_(index, idJ, dilluns) {
  * setmana no es una referencia.
  */
 function ratioDe_(regs, idJ, dilluns) {
-  var setmana = carregaEntre_(regs, idJ, dilluns, sumaDies_(dilluns, 6)).total;
-  var previes = [];
+  var aquesta = carregaEntre_(regs, idJ, dilluns, sumaDies_(dilluns, 6));
+  var setmana = aquesta.total;
+
+  // La mateixa porta que el panell i que l'informe de l'equip tecnic.
+  var finestra = [aquesta], previes = [];
   for (var k = 1; k <= 3; k++) {
     var ini = sumaDies_(dilluns, -7 * k);
     var r = carregaEntre_(regs, idJ, ini, sumaDies_(ini, 6));
-    if (r.hiHaDades) previes.push(r.total);
+    finestra.push(r);
+    previes.push(r.total);
   }
-  if (previes.length < 3) {
-    return { carrega_setmana: setmana, mitjana_previa: null, ratio: null, motiu: 'dades insuficients' };
+  var completes = finestra.every(function (x) { return x.sessions >= MIN_SESSIONS_RATIO; });
+  if (!completes) {
+    return { carrega_setmana: setmana, mitjana_previa: null, ratio: null,
+             motiu: 'li falten sessions registrades' };
   }
   var mitjana = (previes[0] + previes[1] + previes[2]) / 3;
   return {
@@ -1059,9 +1082,11 @@ function getPanell_(equip, dilluns, usuari) {
     rebuts += teuRebuts;
     if (teuRebuts === 0 && diesEsperats.length) sensResposta.push(j.nom);
 
-    // Alerta vermella: dolor que limita
+    /* Alerta vermella: dolor que limita. Tambe al formulari del dia de
+       partit: si ho declara alla, abans no es mirava i no sortia res. */
     dies.forEach(function (d) {
-      var a = perDia[d].abans;
+      var a = (perDia[d].abans && perDia[d].abans.limita) ? perDia[d].abans
+            : ((perDia[d].partit && perDia[d].partit.limita) ? perDia[d].partit : null);
       if (a && a.limita) {
         alertes.push({
           nivell: 'vermella',
