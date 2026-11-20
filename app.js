@@ -2252,8 +2252,9 @@ async function baixaInforme(boto) {
 
   try {
     const d = await apiInformes('baixaInforme', { id: boto.getAttribute('data-inf') });
-    const url = urlDePdf(d.pdf);
     const nom = d.nom || 'Informe.pdf';
+    const fitxer = new File([bytesDePdf(d.pdf)], nom, { type: 'application/pdf' });
+    const url = urlDePdf(fitxer);
 
     const a = document.createElement('a');
     a.className = 'btn secundari';
@@ -2264,7 +2265,32 @@ async function baixaInforme(boto) {
     a.textContent = 'Obrir l\u2019informe';
     card.replaceChild(a, boto);
 
-    avis.innerHTML = 'Si no s&#39;obre sol, toca <b>Obrir l&rsquo;informe</b>.';
+    /* Compartir des del visor del m\u00f2bil comparteix l'adre\u00e7a del blob, que
+       no val res fora de l'app: ni te la pots enviar a tu mateix. Per desar
+       el PDF de deb\u00f2 cal passar-li el fitxer, i aix\u00f2 el m\u00f2bil nom\u00e9s ho
+       accepta dins d'un toc. Per sort el segon toc ja hi \u00e9s. */
+    let potDesar = false;
+    try {
+      potDesar = !!(navigator.canShare && navigator.canShare({ files: [fitxer] }));
+    } catch (_) { potDesar = false; }
+
+    if (potDesar) {
+      const desa = document.createElement('button');
+      desa.type = 'button';
+      desa.className = 'btn secundari';
+      desa.style.marginTop = '8px';
+      desa.textContent = 'Desar o enviar';
+      desa.addEventListener('click', () => {
+        navigator.share({ files: [fitxer], title: nom }).catch(() => {});
+      });
+      a.parentNode.insertBefore(desa, a.nextSibling);
+    }
+
+    avis.innerHTML = 'Si no s&#39;obre sol, toca <b>Obrir l&rsquo;informe</b>.' +
+      (potDesar
+        ? ' Per desar-lo al m&ograve;bil o enviar-lo, fes servir <b>Desar o enviar</b>: ' +
+          'el bot&oacute; de compartir del visor nom&eacute;s comparteix l&rsquo;enlla&ccedil;.'
+        : '');
     avis.classList.remove('amagat');
     a.click();
   } catch (e) {
@@ -2278,12 +2304,17 @@ async function baixaInforme(boto) {
 }
 
 
-/** El base64 que arriba del full, convertit en una adreça que el mòbil pot obrir. */
-function urlDePdf(base64) {
+/** El base64 que arriba del full, convertit en els bytes del PDF. */
+function bytesDePdf(base64) {
   const bin = atob(base64 || '');
   const bytes = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
-  const url = URL.createObjectURL(new Blob([bytes], { type: 'application/pdf' }));
+  return bytes;
+}
+
+/** Una adreça que el mòbil pot obrir, a partir del fitxer. */
+function urlDePdf(fitxer) {
+  const url = URL.createObjectURL(fitxer);
   // Mitja hora de marge i fora: si no, el PDF es queda a la memòria del
   // mòbil fins que es tanca l'app.
   setTimeout(() => URL.revokeObjectURL(url), 30 * 60 * 1000);
