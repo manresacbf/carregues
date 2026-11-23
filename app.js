@@ -72,7 +72,7 @@ const DIES_CURT = ['dl', 'dm', 'dc', 'dj', 'dv', 'ds', 'dg'];
 /* La versio que s'esta executant. Ha de coincidir amb VERSIO del
    service-worker.js: es l'unica manera de saber, des del telefon, si l'app
    ja s'ha refrescat. */
-const VERSIO_APP = 'v40';
+const VERSIO_APP = 'v41';
 
 const CLAUS = {
   sessio: 'carregues.sessio',
@@ -144,6 +144,19 @@ function diaCurt(iso) {
 }
 
 function formatDia(iso) { return iso.slice(8, 10) + '/' + iso.slice(5, 7); }
+
+const DIES_LLARG = ['dilluns', 'dimarts', 'dimecres', 'dijous', 'divendres', 'dissabte', 'diumenge'];
+const MESOS_LLARG = ['gener', 'febrer', 'març', 'abril', 'maig', 'juny', 'juliol',
+                     'agost', 'setembre', 'octubre', 'novembre', 'desembre'];
+
+/** "dilluns 23 de novembre". Per a les frases, no per a les graelles. */
+function diaLlarg(iso) {
+  const p = iso.split('-').map(Number);
+  const d = new Date(p[0], p[1] - 1, p[2]);
+  const mes = MESOS_LLARG[p[1] - 1] || '';
+  const de = 'aeiou'.indexOf(mes.charAt(0)) !== -1 ? ' d\'' : ' de ';
+  return DIES_LLARG[(d.getDay() + 6) % 7] + ' ' + p[2] + de + mes;
+}
 
 function llegeix(clau, defecte) {
   try {
@@ -505,6 +518,7 @@ function ruta() {
   else if (r.vista === 'despres') pintaDespres();
   else if (r.vista === 'partit') pintaPartit();
   else if (r.vista === 'resum') pintaResum();
+  else if (r.vista === 'baixa') pintaBaixa();
   else if (r.vista === 'panell') pintaPanell();
   else if (r.vista === 'fitxa') pintaFitxa(r.id);
   else if (r.vista === 'partit-staff') pintaPartitStaff();
@@ -541,11 +555,16 @@ function pintaInici() {
     '<p class="meta" style="margin:0">' + esc(diaCurt(avui)) + ' ' + esc(formatDia(avui)) + '</p>' +
     '<p class="hola">Hola, ' + esc((jo.nom || '').split(' ')[0]) + '</p>' +
     '<p class="meta" style="margin:0 0 16px">' + esc(jo.equip || '') + '</p>' +
+    targetaBaixa() +
 
     rajola('#/abans', '🌅', 'Abans de l\'entrenament', 'Com arribes avui?', fet('abans')) +
     rajola('#/despres', '🌙', 'Després de l\'entrenament', 'Com ha anat la sessió?', fet('despres')) +
     rajola('#/partit', '🏀', 'Dia de partit', 'Com ha anat el partit?', fet('partit')) +
     rajola('#/resum', '📈', 'El meu resum', 'La teva setmana i la teva càrrega', false) +
+    (laMevaBaixa()
+      ? ''
+      : rajola('#/baixa', '🚑', 'Avui no entreno', 'Lesió, malaltia o un altre motiu',
+               !!registreDe(avui, 'baixa'))) +
     // Només si n'hi ha cap: una rajola que porta a una pantalla buida fa
     // pensar que l'app s'ha espatllat.
     (meusInformes && meusInformes.length
@@ -559,6 +578,12 @@ function pintaInici() {
     '</p>';
 
   $$('#contingut [data-ves]').forEach((b) => b.addEventListener('click', () => ves(b.getAttribute('data-ves'))));
+  if ($('#torno')) $('#torno').addEventListener('click', () => {
+    encua({ id: uuid(), data: avuiISO(), moment: 'baixa', motiu: 'alta',
+            timestamp: new Date().toISOString() });
+    avisa('Ja tornes a estar en marxa');
+    pintaInici();
+  });
   // Es demana un sol cop per obertura, i sense fer esperar: la pantalla ja
   // esta pintada i la rajola hi apareix quan arriba la resposta.
   demanaInformes('meusInformes', CLAUS.informes, (l) => { meusInformes = l; });
@@ -623,24 +648,67 @@ function dadesMolestia() {
   };
 }
 
+/** El nom que es desa al full: "Isquiotibial dret", "Lumbars"… */
+function nomDeZona(z) {
+  return z.getAttribute('data-zona') +
+    (z.getAttribute('data-costat') ? ' ' + z.getAttribute('data-costat') : '');
+}
+
+/** Ensenya una de les dues cares del cos. */
+function mostraCara(quina) {
+  $$('#mapa [data-vista]').forEach((v) =>
+    v.classList.toggle('amagat', v.getAttribute('data-vista') !== quina));
+  $$('#mapa [data-cara]').forEach((b) =>
+    b.setAttribute('aria-pressed', String(b.getAttribute('data-cara') === quina)));
+}
+
 function montaMapa() {
   $('#mapa').appendChild(document.getElementById('tpl-cos').content.cloneNode(true));
 
   const mostra = () => { $('#zona-triada').textContent = zonaTriada || 'Toca on et fa mal'; };
+  // Les dues cares alhora: una zona triada al darrere segueix triada encara
+  // que es giri el ninot.
   const totes = () => $$('#mapa .zona').concat($$('#mapa .zona-boto'));
 
+  $$('#mapa [data-cara]').forEach((b) =>
+    b.addEventListener('click', () => mostraCara(b.getAttribute('data-cara'))));
+
   totes().forEach((z) => {
-    const nom = z.getAttribute('data-zona') +
-      (z.getAttribute('data-costat') ? ' ' + z.getAttribute('data-costat') : '');
+    const nom = nomDeZona(z);
     z.addEventListener('click', () => {
       const ja = z.getAttribute('aria-pressed') === 'true';
-      totes().forEach((x) => x.setAttribute('aria-pressed', 'false'));
-      z.setAttribute('aria-pressed', ja ? 'false' : 'true');
+      // L'espatlla surt a les dues cares i és la mateixa: es marquen totes
+      // dues, perquè en girar el ninot es vegi igualment triada.
+      totes().forEach((x) =>
+        x.setAttribute('aria-pressed', String(!ja && nomDeZona(x) === nom)));
       zonaTriada = ja ? '' : nom;
       mostra();
     });
   });
   mostra();
+}
+
+/** Deixa triada una zona, i gira el ninot si és només de l'altra cara. */
+function triaZona(nom) {
+  zonaTriada = nom || '';
+  $('#zona-triada').textContent = zonaTriada || 'Toca on et fa mal';
+
+  const totes = $$('#mapa .zona').concat($$('#mapa .zona-boto'));
+  totes.forEach((z) => z.setAttribute('aria-pressed', 'false'));
+  if (!zonaTriada) return;
+
+  const seves = totes.filter((z) => nomDeZona(z) === zonaTriada);
+  seves.forEach((z) => z.setAttribute('aria-pressed', 'true'));
+
+  // Si ja se'n veu una a la cara que hi ha davant, no cal girar res:
+  // l'espatlla és a totes dues i giraria sense motiu.
+  const visible = seves.some((z) => {
+    const v = z.closest('[data-vista]');
+    return !v || !v.classList.contains('amagat');
+  });
+  if (visible) return;
+  const v = seves[0] && seves[0].closest('[data-vista]');
+  if (v) mostraCara(v.getAttribute('data-vista'));
 }
 
 /** Deixa la molèstia com estava en un registre ja enviat. */
@@ -653,15 +721,171 @@ function reomplMolestia(r) {
   if (!r.te_molestia) return;
   $('#bloc-molestia').classList.remove('amagat');
   montaMapa();
-  zonaTriada = r.zona_molestia || '';
-  $('#zona-triada').textContent = zonaTriada || 'Toca on et fa mal';
-  $$('#mapa .zona').concat($$('#mapa .zona-boto')).forEach((z) => {
-    const nom = z.getAttribute('data-zona') + (z.getAttribute('data-costat') ? ' ' + z.getAttribute('data-costat') : '');
-    if (nom === zonaTriada) z.setAttribute('aria-pressed', 'true');
-  });
+  triaZona(r.zona_molestia || '');
   if (r.dolor !== null && r.dolor !== '') marca('[data-numeros="dolor"]', r.dolor);
   marca('#limita', r.limita ? 'si' : 'no');
 }
+
+/* ─────────────────────────────────────────────────────────────────────
+   9 bis. LA BAIXA
+   ─────────────────────────────────────────────────────────────────────
+
+   Fins ara, una jugadora lesionada no deixava cap rastre: el compliment la
+   comptava com si hagués passat de l'app i sortia a "qui falta". Ara ho pot
+   dir, i mentre duri no se li demana res.
+
+   La baixa es tanca sola quan torna a enviar un registre d'entrenament. És
+   a posta: val més que es tanqui sola que no pas que quedi oberta perquè
+   ningú no se'n recorda. */
+
+const MOTIUS_BAIXA = [
+  ['lesio', 'Lesió'],
+  ['malaltia', 'Malaltia'],
+  ['altres', 'Altres']
+];
+
+function nomMotiu(clau) {
+  const m = MOTIUS_BAIXA.filter((x) => x[0] === clau)[0];
+  return m ? m[1] : 'Baixa';
+}
+
+/**
+ * Si avui és de baixa, quina.
+ *
+ * Es recorre dia a dia des de l'últim mes, no es mira l'última fila: pot
+ * haver declarat la baixa al matí i haver acabat entrenant a la tarda, i
+ * llavors la baixa segueix oberta però aquell dia va entrenar. És el mateix
+ * càlcul que fa el full; aquí es fa amb el que hi ha al mòbil perquè la
+ * pantalla d'inici no hagi d'esperar ningú.
+ */
+function laMevaBaixa() {
+  const avui = avuiISO();
+  const perDia = {};
+  meus.forEach((r) => {
+    if (!r.data || r.data > avui || r.data < sumaDies(avui, -120)) return;
+    const x = perDia[r.data] || (perDia[r.data] = {});
+    if (r.moment === 'baixa') {
+      if (String(r.motiu || '').toLowerCase() === 'alta') x.alta = true;
+      else x.baixa = r;
+    } else x.entreno = true;
+  });
+
+  let oberta = null;
+  Object.keys(perDia).sort().forEach((d) => {
+    const x = perDia[d];
+    if (x.alta || x.entreno) oberta = null;
+    if (x.baixa) {
+      oberta = { des: d, motiu: String(x.baixa.motiu || '').toLowerCase(),
+                 zona: x.baixa.zona_molestia || '', dolor: x.baixa.dolor };
+    }
+  });
+  return oberta;
+}
+
+/** Quants dies fa, comptant el d'avui. */
+function diesDes(data) {
+  let n = 1, d = data;
+  const avui = avuiISO();
+  while (d < avui && n < 400) { d = sumaDies(d, 1); n++; }
+  return n;
+}
+
+function targetaBaixa() {
+  const b = laMevaBaixa();
+  if (!b) return '';
+  const dies = diesDes(b.des);
+  return '<div class="card" style="border-color:var(--avis)">' +
+      '<div class="eyebrow" style="color:var(--avis)">Est&agrave;s de baixa</div>' +
+      '<p style="margin:6px 0 2px; font-weight:600">' + esc(nomMotiu(b.motiu)) +
+        (b.zona ? ' &middot; ' + esc(b.zona.toLowerCase()) : '') + '</p>' +
+      '<p class="meta" style="margin:0 0 12px">Des de ' + esc(diaLlarg(b.des)) +
+        ' &middot; ' + (dies === 1 ? 'avui mateix' : 'fa ' + dies + ' dies') + '</p>' +
+      '<button type="button" class="btn secundari" id="torno">Ja torno a entrenar</button>' +
+    '</div>';
+}
+
+
+function pintaBaixa() {
+  $('#titol').textContent = 'No entreno';
+  const dia = avuiISO();
+  const previ = registreDe(dia, 'baixa');
+  zonaTriada = '';
+
+  $('#contingut').innerHTML =
+    '<div class="card">' +
+      '<div class="pregunta" style="margin:0">' +
+        '<div class="q">No entreno per&hellip;</div>' +
+        '<div class="sino tres" id="motiu">' +
+          MOTIUS_BAIXA.map((m) =>
+            '<button type="button" data-valor="' + m[0] + '" aria-pressed="false">' +
+              esc(m[1]) + '</button>').join('') +
+        '</div>' +
+      '</div>' +
+    '</div>' +
+
+    '<div class="card amagat" id="bloc-on">' +
+      '<div class="eyebrow">On et fa mal</div>' +
+      '<div id="mapa"></div>' +
+      '<div class="pregunta" style="margin:18px 0 0">' +
+        '<div class="q">Quant et fa mal?</div>' +
+        blocNumeros('dolor', 0, 10, '0 gens', '10 moltíssim') +
+      '</div>' +
+    '</div>' +
+
+    blocComentari('Vols dir-hi alguna cosa? (opcional)') +
+
+    '<div class="card">' +
+      '<div class="eyebrow">Mentre estiguis de baixa</div>' +
+      '<p class="meta" style="margin:8px 0 0">No et demanarem els formularis de cada ' +
+      'dia i no sortir&agrave;s com si no haguessis contestat. <b>Quan tornis a entrenar ' +
+      'i enviïs un registre, la baixa es tanca sola</b>; si tornes abans, la pots ' +
+      'tancar tu des de l&rsquo;inici.</p>' +
+    '</div>' +
+
+    '<button class="btn" id="desa">' + (previ ? 'Actualitzar' : 'Enviar') + '</button>';
+
+  enganxaUnicaTria('#motiu');
+  enganxaUnicaTria('[data-numeros="dolor"]');
+
+  // El mapa només surt si és una lesió: a qui té grip no li fa falta.
+  const miraMotiu = () => {
+    const lesio = $('#motiu button[data-valor="lesio"]').getAttribute('aria-pressed') === 'true';
+    $('#bloc-on').classList.toggle('amagat', !lesio);
+    if (lesio && !$('#mapa').children.length) montaMapa();
+  };
+  $$('#motiu button').forEach((b) => b.addEventListener('click', miraMotiu));
+
+  if (previ) {
+    const b = $('#motiu button[data-valor="' + previ.motiu + '"]');
+    if (b) b.setAttribute('aria-pressed', 'true');
+    miraMotiu();
+    if (previ.zona_molestia) triaZona(previ.zona_molestia);
+    if (previ.dolor !== null && previ.dolor !== '' && previ.dolor !== undefined) {
+      const d = $('[data-numeros="dolor"] button[data-valor="' + previ.dolor + '"]');
+      if (d) d.setAttribute('aria-pressed', 'true');
+    }
+    if (previ.comentari) $('#comentari').value = previ.comentari;
+  }
+
+  $('#desa').addEventListener('click', () => {
+    const motiu = triatText('#motiu');
+    if (!motiu) { avisa('Digues per què no entrenes', true); return; }
+    if (motiu === 'lesio' && !zonaTriada) { avisa('Toca on et fa mal', true); return; }
+
+    encua({
+      id: uuid(), data: dia, moment: 'baixa', motiu: motiu,
+      te_molestia: motiu === 'lesio',
+      zona_molestia: motiu === 'lesio' ? zonaTriada : '',
+      dolor: motiu === 'lesio' ? triat('[data-numeros="dolor"]') : null,
+      comentari: $('#comentari').value.trim(),
+      timestamp: new Date().toISOString()
+    });
+    zonaTriada = '';
+    avisa('Rebut. Que et millloris!');
+    ves('#/inici');
+  });
+}
+
 
 /* ─────────────────────────────────────────────────────────────────────
    10. ABANS DE L'ENTRENAMENT
@@ -696,6 +920,12 @@ function enganxaUnicaTria(sel) {
 function triat(sel) {
   const b = $(sel + ' button[aria-pressed="true"]');
   return b ? Number(b.getAttribute('data-valor')) : null;
+}
+
+/** El mateix, per als grups on el valor no és un número sinó una paraula. */
+function triatText(sel) {
+  const b = $(sel + ' button[aria-pressed="true"]');
+  return b ? b.getAttribute('data-valor') : '';
 }
 
 /* ─────────────── De quin dia són les dades ───────────────
@@ -1105,20 +1335,60 @@ function diesComptats(visibles) {
 }
 
 /** Compliment recalculat només amb les jugadores que es veuen ara. */
+/**
+ * Qui és de baixa ara mateix.
+ *
+ * Va amb el filtre d'equip, com les alertes. I la que fa massa dies que
+ * dura surt marcada: o encara hi és, o s'ha quedat oberta perquè la
+ * jugadora no ha tornat a entrar. Si no es veiés, desapareixeria en silenci
+ * del compliment i de "qui falta".
+ */
+function blocBaixes(visibles) {
+  const ids = {};
+  visibles.forEach((j) => { ids[j.id] = true; });
+  const llista = (panell.baixes || []).filter((b) => ids[b.id_jugadora]);
+  if (!llista.length) return '';
+
+  return '<div class="card"><div class="eyebrow">De baixa ara mateix</div>' +
+    llista.map((b, i) =>
+      '<div style="display:flex; justify-content:space-between; align-items:baseline; gap:10px;' +
+        (i ? ' margin-top:12px; padding-top:12px; border-top:1px solid var(--line)' : ' margin-top:10px') + '">' +
+        '<span style="font-weight:600">' + esc(b.jugadora) + '</span>' +
+        '<span class="meta" style="text-align:right' + (b.llarga ? '; color:var(--avis)' : '') + '">' +
+          esc(nomMotiu(b.motiu)) + (b.zona ? ' &middot; ' + esc(String(b.zona).toLowerCase()) : '') + '<br>' +
+          'des del ' + esc(formatDia(b.des)) + ' &middot; ' +
+          (b.llarga ? '<b>fa ' + b.dies + ' dies</b>' : 'fa ' + b.dies + ' dies') +
+        '</span>' +
+      '</div>').join('') +
+    (llista.some((b) => b.llarga)
+      ? '<p class="meta" style="margin:12px 0 0">Les marcades en groc fa massa dies que ' +
+        'duren: o encara hi s&oacute;n, o s&rsquo;han quedat obertes perqu&egrave; la ' +
+        'jugadora no ha tornat a entrar a l&rsquo;app.</p>'
+      : '') +
+    '</div>';
+}
+
+
 function complimentDe(visibles, diesEsperats) {
   let rebuts = 0;
+  let esperats = 0;
   const sense = [];
   visibles.forEach((j) => {
     let meus = 0;
+    let seus = 0;
     j.dies.forEach((d) => {
       if (diesEsperats.indexOf(d.data) === -1) return;
+      // Els dies de baixa no es compten: una lesionada no ha fallat, i fins
+      // ara sortia igual que qui passa de l'app.
+      if (d.baixa) return;
+      seus++;
       if (d.te_abans) meus++;
       if (d.te_despres) meus++;
     });
     rebuts += meus;
-    if (!meus && diesEsperats.length) sense.push(j.nom);
+    esperats += seus * 2;
+    if (!meus && seus) sense.push(j.nom);
   });
-  const esperats = visibles.length * diesEsperats.length * 2;
   return { rebuts: rebuts, esperats: esperats, sense: sense,
            percentatge: esperats ? Math.round((rebuts / esperats) * 100) : null };
 }
@@ -1296,10 +1566,13 @@ function pintaPanell() {
         (j.dorsal ? '<b>' + esc(j.dorsal) + '</b> ' : '') + esc(j.nom) + etiqueta + '</button></td>' +
       j.dies.map((d) => {
         const te = d.carrega !== null && d.carrega !== undefined;
-        return '<td class="cel' + (te ? ' plena' : ' buida') + (d.limita ? ' limita' : '') + '"' +
+        /* Una casella buida vol dir "no ha contestat". El dia que era de
+           baixa no és el mateix, i fins ara es veien igual. */
+        return '<td class="cel' + (te ? ' plena' : ' buida') + (d.limita ? ' limita' : '') +
+            (d.baixa ? ' de-baixa' : '') + '"' +
           ' style="' + (te ? colorCarrega(d.carrega, max) : '') + '"' +
           ' data-jug="' + esc(j.id) + '" data-dia="' + esc(d.data) + '">' +
-          (te ? '' : (d.te_abans ? '·' : '–')) +
+          (d.baixa ? (d.baixa === 'lesio' ? '✚' : '○') : (te ? '' : (d.te_abans ? '·' : '–'))) +
           (d.molestia ? '<span class="punt-mol"></span>' : '') +
         '</td>';
       }).join('') +
@@ -1317,6 +1590,7 @@ function pintaPanell() {
     filtres +
 
     '<div class="card"><div class="eyebrow">Alertes actives</div>' + blocAlertes + '</div>' +
+    blocBaixes(visibles) +
     blocMolesties +
 
     // Qui no ha contestat segueix sent útil; el percentatge no, que ja es

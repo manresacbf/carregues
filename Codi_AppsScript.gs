@@ -50,15 +50,19 @@ var FULLS = {
     // nom_jugadora es nomes per poder llegir el full amb ulls humans: qui mana
     // es id_jugadora. Si canvia un nom a Jugadores, les files velles conserven
     // el que hi havia el dia que es van escriure.
-    // moment: 'abans' | 'despres' | 'partit'.
+    // moment: 'abans' | 'despres' | 'partit' | 'baixa'.
+    // 'baixa' es el dia que la jugadora diu que no entrena. El motiu diu per
+    // que ('lesio', 'malaltia', 'altres') o que ja torna ('alta'). Una baixa
+    // dura fins que torna a registrar un entrenament o fins que la tanca.
     // valoracio (1-5) es la cara de "com ha anat": nomes a despres i partit.
     // duresa es guarda SEMPRE en escala 0-10, encara que la jugadora triï
     // entre cinc cares, perque les setmanes velles i les noves es puguin
     // comparar: la carrega es duresa x minuts i canviar l'escala la partiria.
     capcalera: ['id', 'id_jugadora', 'nom_jugadora', 'data', 'moment', 'son', 'fatiga', 'anim',
                 'te_molestia', 'zona_molestia', 'dolor', 'limita', 'valoracio', 'duresa',
-                'tipus_sessio', 'minuts', 'carrega', 'comentari', 'timestamp'],
-    text: ['id', 'id_jugadora', 'data', 'moment', 'te_molestia', 'limita', 'tipus_sessio', 'timestamp']
+                'tipus_sessio', 'minuts', 'carrega', 'comentari', 'motiu', 'timestamp'],
+    text: ['id', 'id_jugadora', 'data', 'moment', 'te_molestia', 'limita', 'tipus_sessio',
+           'motiu', 'timestamp']
   },
   usuaris: {
     nom: 'Usuaris',
@@ -792,13 +796,21 @@ function desaRegistre_(p, codi) {
   var moment = text_(p.moment);
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(data)) return json_({ ok: false, error: 'Data no valida: ' + data });
-  if (['abans', 'despres', 'partit'].indexOf(moment) === -1) {
+  if (['abans', 'despres', 'partit', 'baixa'].indexOf(moment) === -1) {
     return json_({ ok: false, error: 'Moment no valid: ' + moment });
+  }
+
+  /* El motiu nomes val a la baixa. 'alta' es la fila que la tanca: es desa
+     com una baixa mes perque la clau del dia segueixi sent la mateixa i
+     perque l'ordre dels dies quedi al full, llegible. */
+  var motiu = (moment === 'baixa') ? text_(p.motiu).toLowerCase() : '';
+  if (moment === 'baixa' && ['lesio', 'malaltia', 'altres', 'alta'].indexOf(motiu) === -1) {
+    return json_({ ok: false, error: 'Motiu no valid: ' + motiu });
   }
 
   // La duresa arriba ja en escala 0-10 encara que la jugadora triï cares:
   // canviar l'escala partiria la comparacio amb les setmanes velles.
-  var duresa = (moment === 'abans') ? '' : num_(p.duresa);
+  var duresa = (moment === 'abans' || moment === 'baixa') ? '' : num_(p.duresa);
   var tipus = (moment === 'despres') ? text_(p.tipus_sessio) : '';
   var minuts = '';
   var carrega = '';
@@ -824,16 +836,19 @@ function desaRegistre_(p, codi) {
     son: moment === 'abans' ? num_(p.son) : '',
     fatiga: moment === 'abans' ? num_(p.fatiga) : '',
     anim: moment === 'abans' ? num_(p.anim) : '',
-    te_molestia: (moment === 'abans' || moment === 'partit') ? siNo_(p.te_molestia) : '',
+    te_molestia: (moment === 'abans' || moment === 'partit' || moment === 'baixa')
+                 ? siNo_(p.te_molestia) : '',
     zona_molestia: text_(p.zona_molestia),
     dolor: num_(p.dolor),
-    limita: siNo_(p.limita),
-    valoracio: moment === 'abans' ? '' : num_(p.valoracio),
+    // Una baixa per lesio limita per definicio: si no, no seria una baixa.
+    limita: (moment === 'baixa' && motiu === 'lesio') ? 'si' : siNo_(p.limita),
+    valoracio: (moment === 'abans' || moment === 'baixa') ? '' : num_(p.valoracio),
     duresa: duresa,
     tipus_sessio: tipus,
     minuts: minuts,
     carrega: carrega,
     comentari: text_(p.comentari),
+    motiu: motiu,
     timestamp: text_(p.timestamp) || new Date().toISOString()
   };
 
@@ -1030,6 +1045,72 @@ function ratioDe_(regs, idJ, dilluns) {
 }
 
 /* ------------------------------------------------------------------ *
+ *  Les baixes                                                         *
+ * ------------------------------------------------------------------ */
+
+/* Dies a partir dels quals una baixa oberta es mes sospitosa que certa.
+   No la tanca: nomes fa que surti marcada, perque algu hi pensi. */
+var BAIXA_LLARGA = 14;
+
+/**
+ * Quins dies ha estat de baixa una jugadora, i si encara ho esta.
+ *
+ * Es calcula recorrent els dies en ordre, no mirant l'ultima fila: una
+ * jugadora pot declarar la baixa al mati i acabar entrenant a la tarda, i
+ * llavors aquell dia no es de baixa encara que la baixa segueixi oberta
+ * per als dies de despres.
+ *
+ * Entrenar tanca la baixa. Es a posta: val mes que es tanqui sola que no
+ * pas que quedi oberta perque ningu no se'n recorda.
+ */
+function baixesDe_(meus, desDe, finsA) {
+  var perDia = {};
+  meus.forEach(function (r) {
+    var d = text_(r.data);
+    if (!d || d < desDe || d > finsA) return;
+    if (!perDia[d]) perDia[d] = { baixa: null, alta: false, entreno: false };
+    var m = text_(r.moment);
+    if (m === 'baixa') {
+      if (text_(r.motiu).toLowerCase() === 'alta') perDia[d].alta = true;
+      else perDia[d].baixa = r;
+    } else if (m === 'abans' || m === 'despres' || m === 'partit') {
+      perDia[d].entreno = true;
+    }
+  });
+
+  var dies = {}, oberta = null;
+  var d = desDe;
+  /* Amb topall: si una data ve malament, sumaDies_() no avanca i el bucle
+     no sortiria mai. Penjaria el panell de tot l'equip per una sola cel.la
+     mal escrita. */
+  var voltes = 0;
+  while (d <= finsA && voltes++ < 400) {
+    var x = perDia[d];
+    if (x) {
+      if (x.alta || x.entreno) oberta = null;
+      if (x.baixa) {
+        oberta = { des: d, motiu: text_(x.baixa.motiu).toLowerCase(),
+                   zona: text_(x.baixa.zona_molestia), dolor: num_(x.baixa.dolor) };
+      }
+      if (oberta && !x.entreno) dies[d] = oberta.motiu;
+    } else if (oberta) {
+      dies[d] = oberta.motiu;
+    }
+    d = sumaDies_(d, 1);
+  }
+  return { dies: dies, oberta: oberta };
+}
+
+
+/** Quants dies fa, comptant tots dos extrems. */
+function diesEntre_(desDe, finsA) {
+  var n = 0, d = desDe;
+  while (d < finsA && n < 400) { d = sumaDies_(d, 1); n++; }
+  return n;
+}
+
+
+/* ------------------------------------------------------------------ *
  *  Panell del cos tecnic                                              *
  * ------------------------------------------------------------------ */
 
@@ -1058,7 +1139,9 @@ function getPanell_(equip, dilluns, usuari) {
 
   var alertes = [];
   var sensResposta = [];
+  var baixes = [];
   var rebuts = 0;
+  var esperats = 0;
 
   var filesJug = jugs.map(function (j) {
     var meus = regs.filter(function (r) { return r.id_jugadora === j.id; });
@@ -1070,17 +1153,38 @@ function getPanell_(equip, dilluns, usuari) {
     meus.forEach(function (r) {
       if (!perDia[r.data]) return;
       if (r.moment === 'despres' || r.moment === 'partit') perDia[r.data][r.moment] = r;
-      else perDia[r.data].abans = r;
+      // Nomes 'abans' va a abans. Abans aqui hi queia tot el que no fos
+      // despres ni partit, i amb les baixes aixo faria que un dia que no
+      // ha entrenat comptes com si hagues omplert el formulari.
+      else if (r.moment === 'abans') perDia[r.data].abans = r;
     });
 
-    // Compliment
+    /* Les baixes es miren des de forca abans de la setmana que es veu (una
+       baixa oberta fa tres setmanes segueix valent) i fins avui encara que
+       s'estigui mirant una setmana passada, perque la llista de qui es de
+       baixa ha de dir com estan ARA. */
+    var fiBaixes = dies[6] > avui ? dies[6] : avui;
+    var b = baixesDe_(meus, sumaDies_(dilluns, -28), fiBaixes);
+    if (b.oberta && b.dies[avui]) {
+      baixes.push({
+        id_jugadora: j.id, jugadora: j.nom, equip: j.equip,
+        motiu: b.oberta.motiu, zona: b.oberta.zona,
+        dolor: b.oberta.dolor === '' ? null : b.oberta.dolor,
+        des: b.oberta.des, dies: diesEntre_(b.oberta.des, avui) + 1
+      });
+    }
+
+    /* Compliment. Els dies de baixa no es compten: una lesionada no ha
+       fallat, i fins ara sortia igual que qui passa de l'app. */
+    var meusDies = diesEsperats.filter(function (d) { return !b.dies[d]; });
     var teuRebuts = 0;
-    diesEsperats.forEach(function (d) {
+    meusDies.forEach(function (d) {
       if (perDia[d].abans) teuRebuts++;
       if (perDia[d].despres) teuRebuts++;
     });
     rebuts += teuRebuts;
-    if (teuRebuts === 0 && diesEsperats.length) sensResposta.push(j.nom);
+    esperats += meusDies.length * 2;
+    if (teuRebuts === 0 && meusDies.length) sensResposta.push(j.nom);
 
     /* Alerta vermella: dolor que limita. Tambe al formulari del dia de
        partit: si ho declara alla, abans no es mirava i no sortia res. */
@@ -1166,6 +1270,9 @@ function getPanell_(equip, dilluns, usuari) {
         te_abans: !!a,
         te_despres: !!p,
         te_partit: !!pt,
+        /* El dia que era de baixa deixa de ser una casella buida. Buida vol
+           dir "no ha contestat", i no es el mateix que "no podia entrenar". */
+        baixa: b.dies[d] || '',
         carrega_partit: pt ? (Number(pt.carrega) || 0) : null,
         comentaris: comentaris
       };
@@ -1181,8 +1288,6 @@ function getPanell_(equip, dilluns, usuari) {
     };
   });
 
-  var esperats = jugs.length * diesEsperats.length * 2;
-
   return json_({
     ok: true,
     data: {
@@ -1193,6 +1298,13 @@ function getPanell_(equip, dilluns, usuari) {
       llindar: llindar,
       equips: llista_(conf.equips),
       jugadores: filesJug,
+      /* Qui es de baixa ara mateix, de la mes recent a la mes antiga. Les
+         que fa massa dies que duren van marcades: o encara hi son, o s'han
+         quedat obertes perque la jugadora no ha tornat a entrar. */
+      baixes: baixes.map(function (x) {
+        x.llarga = x.dies > BAIXA_LLARGA;
+        return x;
+      }).sort(function (x, y) { return x.des < y.des ? 1 : (x.des > y.des ? -1 : 0); }),
       // Primer les vermelles: son les que demanen una decisio avui mateix.
       alertes: alertes.sort(function (a, b) { return a.nivell === b.nivell ? 0 : (a.nivell === 'vermella' ? -1 : 1); }),
       compliment: {

@@ -178,6 +178,7 @@
 
   /* ---------- Sí / No ---------- */
   .sino{display:grid; grid-template-columns:1fr 1fr; gap:8px;}
+  .sino.tres{grid-template-columns:repeat(3, 1fr);}
   .sino button{
     min-height:52px; background:var(--bg); border:1px solid var(--line);
     border-radius:12px; font-size:16px; font-weight:700; color:var(--text-dim);
@@ -195,6 +196,12 @@
   svg.cos .decor{fill:rgba(255,255,255,.05); stroke:rgba(255,255,255,.15); stroke-width:1.5;}
   svg.cos .zona{fill:rgba(255,255,255,.11); stroke:rgba(255,255,255,.32); stroke-width:1.6; cursor:pointer;}
   svg.cos .zona[aria-pressed="true"]{fill:var(--pink); stroke:var(--pink);}
+  /* Les zones que van a sobre d'una altra, com l'adductor sobre la cuixa:
+     es distingeixen per la vora, que si no semblarien una cama a part. */
+  svg.cos .zona.sobre{stroke-dasharray:3 2.5;}
+  svg.cos .ull{fill:var(--bg); opacity:.75; pointer-events:none;}
+  .cares{display:flex; gap:8px; margin:0 0 12px;}
+  .cares .chip{flex:1;}
   .zona-triada{
     text-align:center; margin-top:8px; font-weight:700; min-height:24px;
   }
@@ -243,6 +250,9 @@
   }
   table.graella td.cel.buida{color:var(--text-dim); font-weight:400; opacity:.55;}
   table.graella td.cel.limita{border-color:var(--vermell); border-width:2px;}
+  /* El dia que era de baixa: ni plena ni "no ha contestat". */
+  table.graella td.cel.de-baixa{color:var(--avis); opacity:1; font-weight:700;
+                                background:rgba(245,165,36,.10);}
   table.graella td.cel .punt-mol{display:block; width:5px; height:5px; border-radius:50%; background:var(--avis); margin:1px auto 0;}
   .barra-compliment{height:9px; background:var(--bg-alt); border-radius:999px; overflow:hidden; margin:8px 0 6px;}
   .barra-compliment i{display:block; height:100%; background:var(--ok);}
@@ -420,41 +430,99 @@
      la jugadora. Per això cada forma ja porta el costat escrit a data-costat
      i, a sobre, hi ha les dues etiquetes.                                  -->
 <template id="tpl-cos">
-  <div class="cos-cap"><span>La teva dreta</span><span>La teva esquerra</span></div>
-  <svg class="cos" viewBox="0 0 200 372" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Mapa corporal">
-    <!-- decoració: tors i braços, no es poden triar -->
-    <rect class="decor" x="76" y="64" width="48" height="84" rx="14"/>
-    <rect class="decor" x="48" y="84" width="13" height="62" rx="6"/>
-    <rect class="decor" x="139" y="84" width="13" height="62" rx="6"/>
+  <!-- Dues cares del mateix cos. Amb ulls és el davant; sense, el darrere.
+       Compte amb els rètols: mirant-la d'esquena, la seva dreta passa a ser
+       la de la dreta de la pantalla, i per això s'inverteixen. Si no, tothom
+       marcaria la cama equivocada. -->
+  <div class="cares">
+    <button type="button" class="chip" data-cara="davant" aria-pressed="true">Davant</button>
+    <button type="button" class="chip" data-cara="darrere" aria-pressed="false">Darrere</button>
+  </div>
 
-    <g class="zona" data-zona="Cap / coll" tabindex="0" role="button" aria-pressed="false">
-      <circle cx="100" cy="28" r="20"/>
-      <rect x="92" y="46" width="16" height="14" rx="4"/>
-    </g>
+  <div data-vista="davant">
+    <div class="cos-cap"><span>La teva dreta</span><span>La teva esquerra</span></div>
+    <svg class="cos" viewBox="0 0 200 372" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Mapa corporal, davant">
+      <!-- decoració: tors i braços, no es poden triar -->
+      <rect class="decor" x="74" y="56" width="52" height="92" rx="15"/>
+      <rect class="decor" x="46" y="78" width="13" height="64" rx="6"/>
+      <rect class="decor" x="141" y="78" width="13" height="64" rx="6"/>
 
-    <ellipse class="zona" data-zona="Espatlla" data-costat="dreta"   cx="62"  cy="74" rx="18" ry="14" tabindex="0" role="button" aria-pressed="false"/>
-    <ellipse class="zona" data-zona="Espatlla" data-costat="esquerra" cx="138" cy="74" rx="18" ry="14" tabindex="0" role="button" aria-pressed="false"/>
+      <g class="zona" data-zona="Cap / coll" tabindex="0" role="button" aria-pressed="false">
+        <circle cx="100" cy="26" r="19"/>
+        <rect x="92" y="44" width="16" height="13" rx="4"/>
+      </g>
+      <!-- els ulls: diuen que la mirem de cara -->
+      <circle class="ull" cx="94" cy="23" r="2.4"/>
+      <circle class="ull" cx="106" cy="23" r="2.4"/>
 
-    <rect class="zona" data-zona="Maluc" data-costat="dret"    x="70"  y="150" width="26" height="28" rx="9" tabindex="0" role="button" aria-pressed="false"/>
-    <rect class="zona" data-zona="Maluc" data-costat="esquerre" x="104" y="150" width="26" height="28" rx="9" tabindex="0" role="button" aria-pressed="false"/>
+      <ellipse class="zona" data-zona="Espatlla" data-costat="dreta"    cx="60"  cy="68" rx="16" ry="12" tabindex="0" role="button" aria-pressed="false"/>
+      <ellipse class="zona" data-zona="Espatlla" data-costat="esquerra" cx="140" cy="68" rx="16" ry="12" tabindex="0" role="button" aria-pressed="false"/>
 
-    <rect class="zona" data-zona="Cuixa" data-costat="dreta"    x="72"  y="182" width="24" height="54" rx="10" tabindex="0" role="button" aria-pressed="false"/>
-    <rect class="zona" data-zona="Cuixa" data-costat="esquerra" x="104" y="182" width="24" height="54" rx="10" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Maluc" data-costat="dret"     x="64"  y="148" width="30" height="26" rx="9" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Maluc" data-costat="esquerre" x="106" y="148" width="30" height="26" rx="9" tabindex="0" role="button" aria-pressed="false"/>
 
-    <rect class="zona" data-zona="Genoll" data-costat="dret"    x="72"  y="240" width="24" height="24" rx="8" tabindex="0" role="button" aria-pressed="false"/>
-    <rect class="zona" data-zona="Genoll" data-costat="esquerre" x="104" y="240" width="24" height="24" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Quàdriceps" data-costat="dret"     x="63"  y="178" width="31" height="54" rx="11" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Quàdriceps" data-costat="esquerre" x="106" y="178" width="31" height="54" rx="11" tabindex="0" role="button" aria-pressed="false"/>
+      <!-- l'adductor fa mal a l'engonal, no a tota la cama: va a sobre de
+           la cuixa i amb la vora discontínua per distingir-lo -->
+      <rect class="zona sobre" data-zona="Adductor" data-costat="dret"     x="82"  y="178" width="12" height="26" rx="6" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona sobre" data-zona="Adductor" data-costat="esquerre" x="106" y="178" width="12" height="26" rx="6" tabindex="0" role="button" aria-pressed="false"/>
 
-    <rect class="zona" data-zona="Bessó" data-costat="dret"    x="74"  y="268" width="21" height="48" rx="9" tabindex="0" role="button" aria-pressed="false"/>
-    <rect class="zona" data-zona="Bessó" data-costat="esquerre" x="105" y="268" width="21" height="48" rx="9" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Genoll" data-costat="dret"     x="64"  y="236" width="24" height="22" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Genoll" data-costat="esquerre" x="112" y="236" width="24" height="22" rx="8" tabindex="0" role="button" aria-pressed="false"/>
 
-    <rect class="zona" data-zona="Turmell" data-costat="dret"    x="75"  y="320" width="19" height="18" rx="6" tabindex="0" role="button" aria-pressed="false"/>
-    <rect class="zona" data-zona="Turmell" data-costat="esquerre" x="106" y="320" width="19" height="18" rx="6" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Tíbia" data-costat="dreta"    x="66"  y="262" width="20" height="46" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Tíbia" data-costat="esquerra" x="114" y="262" width="20" height="46" rx="8" tabindex="0" role="button" aria-pressed="false"/>
 
-    <rect class="zona" data-zona="Peu" data-costat="dret"    x="70"  y="342" width="25" height="20" rx="8" tabindex="0" role="button" aria-pressed="false"/>
-    <rect class="zona" data-zona="Peu" data-costat="esquerre" x="105" y="342" width="25" height="20" rx="8" tabindex="0" role="button" aria-pressed="false"/>
-  </svg>
+      <rect class="zona" data-zona="Turmell" data-costat="dret"     x="67"  y="312" width="18" height="16" rx="6" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Turmell" data-costat="esquerre" x="115" y="312" width="18" height="16" rx="6" tabindex="0" role="button" aria-pressed="false"/>
+
+      <rect class="zona" data-zona="Peu" data-costat="dret"     x="62"  y="332" width="25" height="20" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Peu" data-costat="esquerre" x="113" y="332" width="25" height="20" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+    </svg>
+  </div>
+
+  <div data-vista="darrere" class="amagat">
+    <div class="cos-cap"><span>La teva esquerra</span><span>La teva dreta</span></div>
+    <svg class="cos" viewBox="0 0 200 372" xmlns="http://www.w3.org/2000/svg" role="group" aria-label="Mapa corporal, darrere">
+      <rect class="decor" x="74" y="56" width="52" height="92" rx="15"/>
+      <rect class="decor" x="46" y="78" width="13" height="64" rx="6"/>
+      <rect class="decor" x="141" y="78" width="13" height="64" rx="6"/>
+
+      <g class="zona" data-zona="Clatell" tabindex="0" role="button" aria-pressed="false">
+        <circle cx="100" cy="26" r="19"/>
+        <rect x="92" y="44" width="16" height="13" rx="4"/>
+      </g>
+
+      <ellipse class="zona" data-zona="Espatlla" data-costat="esquerra" cx="60"  cy="68" rx="16" ry="12" tabindex="0" role="button" aria-pressed="false"/>
+      <ellipse class="zona" data-zona="Espatlla" data-costat="dreta"    cx="140" cy="68" rx="16" ry="12" tabindex="0" role="button" aria-pressed="false"/>
+
+      <ellipse class="zona" data-zona="Trapezi" data-costat="esquerre" cx="89"  cy="62" rx="10" ry="7" tabindex="0" role="button" aria-pressed="false"/>
+      <ellipse class="zona" data-zona="Trapezi" data-costat="dret"     cx="111" cy="62" rx="10" ry="7" tabindex="0" role="button" aria-pressed="false"/>
+
+      <rect class="zona" data-zona="Escàpula" data-costat="esquerra" x="77"  y="76" width="21" height="26" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Escàpula" data-costat="dreta"    x="102" y="76" width="21" height="26" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+
+      <rect class="zona" data-zona="Lumbars" x="79" y="118" width="42" height="24" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+
+      <rect class="zona" data-zona="Gluti" data-costat="esquerre" x="64"  y="156" width="30" height="28" rx="11" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Gluti" data-costat="dret"     x="106" y="156" width="30" height="28" rx="11" tabindex="0" role="button" aria-pressed="false"/>
+
+      <rect class="zona" data-zona="Isquiotibial" data-costat="esquerre" x="66"  y="190" width="28" height="52" rx="11" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Isquiotibial" data-costat="dret"     x="106" y="190" width="28" height="52" rx="11" tabindex="0" role="button" aria-pressed="false"/>
+
+      <rect class="zona" data-zona="Bessó" data-costat="esquerre" x="68"  y="248" width="24" height="52" rx="10" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Bessó" data-costat="dret"     x="108" y="248" width="24" height="52" rx="10" tabindex="0" role="button" aria-pressed="false"/>
+
+      <rect class="zona" data-zona="Tendó d'Aquil·les" data-costat="esquerre" x="72"  y="306" width="17" height="22" rx="7" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Tendó d'Aquil·les" data-costat="dret"     x="111" y="306" width="17" height="22" rx="7" tabindex="0" role="button" aria-pressed="false"/>
+
+      <rect class="zona" data-zona="Taló" data-costat="esquerre" x="67"  y="332" width="24" height="20" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+      <rect class="zona" data-zona="Taló" data-costat="dret"     x="109" y="332" width="24" height="20" rx="8" tabindex="0" role="button" aria-pressed="false"/>
+    </svg>
+  </div>
+
   <div class="altres-zones">
-    <button type="button" class="chip zona-boto" data-zona="Esquena" aria-pressed="false">Esquena</button>
     <button type="button" class="chip zona-boto" data-zona="Altres" aria-pressed="false">Altres</button>
   </div>
   <div class="zona-triada meta" id="zona-triada">Toca on et fa mal</div>
